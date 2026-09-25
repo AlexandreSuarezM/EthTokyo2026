@@ -1,8 +1,8 @@
 {
   "name": "solo-startup",
-  "description": "Two or three people shipping fast. Self-approval allowed, live proof only for tier 3, lenient ladder. Still records who approved what.",
+  "description": "Two or three people shipping fast. Self-approval allowed, no live proof (future work), lenient ladder. Still records who approved what.",
   "policy": {
-    "liveProofTier": 3,
+    "liveProofTier": 4,
     "allowSelfApproval": true,
     "flagCooldownDays": 1,
     "flagStrikeWindowDays": 30,

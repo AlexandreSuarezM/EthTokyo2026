@@ -17,10 +17,27 @@ source of truth for its own numbers. CC-3 reads this file: nothing here changes 
 - **Selfie cap = repo tier 1.** A Selfie-only human may hold and use `REPO_TIER` at most 1
   (`policy.maxTierForSelfie = 1`). Granting above the cap reverts (`AboveSelfieCap`).
 
+## Identity
+
+- Every World proof, at enrollment or at approval, must map to the **same stored `humanId`** created at
+  enrollment, so a person's receipts, penalties and score all stack on one human.
+- We use the proof type the docs support for that: enrollment creates a World ID session and stores its
+  `session_id` against the `humanId`; every approval is a session proof (`proveSession`) whose verified
+  `session_id` must equal the stored one (see `docs/DECISIONS.md` Q1). A per-action nullifier is used only
+  for replay protection, never as an identity.
+- A proof that doesn't map to an enrolled `humanId` is rejected.
+
 ## Validation
 
-- Repos at tier >= 2 (`policy.liveProofTier`) need a live personhood proof at approval time.
+- **No presence (liveness) tier for now.** `policy.liveProofTier = 4` in every environment file, above every
+  repo tier (0–3), so no repo requires a live proof. Presence (`require_user_presence`) is future work.
 - Self-approval is allowed (`policy.allowSelfApproval = true`).
+- **Fail closed.** If any expected field in a World verify response is missing or malformed (`success`,
+  `session_id`, `environment`, nullifier, per-credential `results`, …), the server returns a typed error
+  and performs no transaction, no receipt and no merge.
+- **Single use.** Every World approval is consumed once (unique key in the database); a replay is rejected.
+- One receipt per human per change, and one penalty per receipt (both already enforced on-chain:
+  `validatedBy[commitHash][human]` and `penaltyOfReceipt`).
 
 ## Forensics and due process
 

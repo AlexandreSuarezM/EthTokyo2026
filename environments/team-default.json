@@ -1,8 +1,8 @@
 {
   "name": "team-default",
-  "description": "Product team. Self-validation allowed (your rulebook). Critical repos need two receipts and a live personhood proof. Penalties: 100 per mistake, +100% of current score, cap 1000, no AI at 200, banned at 500, fades 100 points per 30 days.",
+  "description": "Product team. Self-validation allowed (your rulebook). Critical repos need two receipts. No live proof (future work). Penalties: 100 per mistake, +100% of current score, cap 1000, no AI at 200, banned at 500, fades 100 points per 30 days.",
   "policy": {
-    "liveProofTier": 2,
+    "liveProofTier": 4,
     "allowSelfApproval": true,
     "flagCooldownDays": 1,
     "flagStrikeWindowDays": 90,
