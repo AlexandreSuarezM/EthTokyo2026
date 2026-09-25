@@ -21,3 +21,7 @@ coverage/
 # Keys and misc
 *.pem
 .DS_Store
+
+# Local leftovers (kept on disk, never committed)
+hitl-attest/
+hitl-attest.zip

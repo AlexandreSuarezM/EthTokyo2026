@@ -1,8 +1,8 @@
 {
   "name": "regulated-fintech",
-  "description": "Audited environment. Live proof from tier 1, no self-approval, strict ladder, per-mark fee paid by the org treasury.",
+  "description": "Audited environment. No live proof (future work), no self-approval, strict ladder, per-mark fee paid by the org treasury.",
   "policy": {
-    "liveProofTier": 1,
+    "liveProofTier": 4,
     "allowSelfApproval": false,
     "flagCooldownDays": 3,
     "flagStrikeWindowDays": 180,
