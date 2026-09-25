@@ -1,5 +1,11 @@
 # Build plan — granular, parallel
 
+> **Scope change (2026-09-25): ENS is cut.** Target prizes: **World IDKit** and **World ID for Agents** only.
+> CC-4 … CC-7 are **DEFERRED (ENS cut)**; any ENS step inside another task (CC-9 subname, CC-11 ENS
+> cross-check, CC-14 "show the ENS name", CC-19 `setup-org.ts`) is skipped. Stage 1 ("score published")
+> means published on-chain through `PenaltyLedger` events and `tokenURI`. CC-13, CC-17 and CC-18 are
+> **stretch**. Minimal ENS returns only as a bonus (section 4). Live status and order: `docs/STATUS.md`.
+
 **Legend**
 - 🟢 **YOU (docs only):** you can do it yourself by following the official docs or dashboards; no code from this repo is needed. Start these right away.
 - 🟡 **YOU + DOCS, verify:** read the docs and write the answer into `docs/DECISIONS.md`. These unblock specific Claude Code tasks.
@@ -16,20 +22,20 @@ Lanes own different directories, so they don't conflict. Merge in the order at t
 | **H** you | dashboards, accounts, `docs/DECISIONS.md` | H1–H9 | now |
 | **0** bootstrap | repo layout, CI | CC-0 | now (first; everything else branches from it) |
 | **1** contracts | `contracts/` | CC-1, CC-2, CC-3 | after CC-0 |
-| **2** ENSv2 | `contracts/src/ens/`, `scripts/ens/`, `app/lib/ens/` | CC-4 … CC-7 | after CC-0; the live parts need H2 + H3 |
+| **2** ENSv2 — **DEFERRED (ENS cut)** | `contracts/src/ens/`, `scripts/ens/`, `app/lib/ens/` | CC-4 … CC-7 | not scheduled; see Bonus |
 | **3** World backend | `app/app/api/`, `app/lib/world/`, `app/lib/chain/` | CC-8 … CC-11 | after CC-0; works with mocks until H1 |
-| **4** agent | `app/lib/agent/`, `app/lib/github/` | CC-12, CC-13 | after CC-8 |
+| **4** agent | `app/lib/agent/`, `app/lib/github/` | CC-12, CC-13 (stretch) | after CC-8 |
 | **5** frontend | `app/app/(pages)/`, `app/components/` | CC-14 … CC-16 | after CC-0 (mock the API first) |
-| **6** merge gate | `.github/`, `gate/` | CC-17 | after CC-2 + CC-7 |
-| **7** ship | tests, deploy, docs | CC-18 … CC-20 | last |
+| **6** merge gate (stretch) | `.github/`, `gate/` | CC-17 | after CC-2 |
+| **7** ship | tests, deploy, docs | CC-18 (stretch), CC-19, CC-20 | last |
 
 ```
 CC-0 ──┬─ Lane 1: CC-1 → CC-2 → (CC-3) ─────────────┐
-       ├─ Lane 2: CC-4 → CC-5 → CC-6 → CC-7 ────────┤
+       ├─ Lane 2: CC-4 → CC-5 → CC-6 → CC-7   DEFERRED (ENS cut)
        ├─ Lane 3: CC-8 → CC-9 → CC-10 → CC-11 ──┐   ├─► CC-17 → CC-18 → CC-19 → CC-20
        │                                        └─► Lane 4: CC-12 → CC-13
        └─ Lane 5: CC-14 → CC-15 → CC-16 (mock API, then wire) ┘
-Merge order: CC-0, Lane 1, Lane 2, Lane 3, Lane 4, Lane 5, Lane 6, Lane 7
+Merge order: CC-0, Lane 1, Lane 3, Lane 4, Lane 5, Lane 6, Lane 7 (Lane 2 deferred)
 ```
 
 ---
@@ -38,6 +44,7 @@ Merge order: CC-0, Lane 1, Lane 2, Lane 3, Lane 4, Lane 5, Lane 6, Lane 7
 
 ### 🟢 H1 World Developer Portal *(unblocks lanes 3 and 4)*
 - [ ] Create an app at <https://developer.world.org>. Note the `app_id`, `rp_id` and the RP signing key.
+> Note (2026-09-25): the portal has no actions/credentials settings; both are set in code (see `docs/DEBRIEF.md`).
 - [ ] Create the actions `hitl-enroll` and `merge` (or whatever names the docs require for your flow).
 - [ ] Enable the credentials: **Proof of Human**, and **Selfie Check** for the fallback path.
 - [ ] Put the values in `app/.env.local` (never commit them): `NEXT_PUBLIC_WORLD_APP_ID`, `WORLD_RP_ID`, `WORLD_SIGNING_KEY`.
@@ -47,7 +54,7 @@ Merge order: CC-0, Lane 1, Lane 2, Lane 3, Lane 4, Lane 5, Lane 6, Lane 7
   - <https://docs.world.org/world-id/idkit/credentials>
   - <https://docs.world.org/agents/human-in-the-loop/integrate.md>
 
-### 🟢 H2 ENS name on Sepolia *(unblocks lane 2, live part)*
+### 🟢 H2 ENS name on Sepolia — DEFERRED (ENS cut; needed only for the Bonus)
 - [ ] Get Sepolia ETH from a faucet.
 - [ ] Register `<org>.eth` on the **ENSv2 beta** (ENS app / explorer beta, Sepolia). Note the name and the owner wallet.
 - Docs:
@@ -159,7 +166,7 @@ Read docs/RULES.md (my decisions). Implement only what changed relative to the c
 Keep AUDIT.md invariants; add tests and update AUDIT.md sections 5 and 8 (numbers table).
 ```
 
-### 🔵 CC-4 ENSv2 recon + addresses *(Lane 2)*
+### 🔵 CC-4 ENSv2 recon + addresses *(Lane 2)* — DEFERRED (ENS cut)
 ```
 Clone https://github.com/ensdomains/contracts-v2 into a temp dir (do not vendor the whole repo).
 Read: contracts/src/registry/PermissionedRegistry.sol, UserRegistry.sol, libraries/RegistryRolesLib.sol,
@@ -174,7 +181,7 @@ Add minimal Solidity interfaces in contracts/src/ens/interfaces/ (only what we c
 Answer questions Q5–Q7 of BUILD_PLAN in docs/DECISIONS.md with file/line references.
 ```
 
-### 🔵 CC-5 ENS publisher contract *(Lane 2)*
+### 🔵 CC-5 ENS publisher contract *(Lane 2)* — DEFERRED (ENS cut)
 ```
 Using docs/ENSV2_NOTES.md, write contracts/src/ens/HitlEnsPublisher.sol implementing
 IScorePublisher (PenaltyLedger) and IRoleMirror (PermissionRegistry). For each human's subname
@@ -187,7 +194,7 @@ Fork tests against Sepolia (forge test --fork-url $SEPOLIA_RPC_URL) using config
 Delete src/mirrors/ENSRoleMirror.sol (ENSv1). Update AUDIT.md scope and add findings if any.
 ```
 
-### 🔵 CC-6 Subnames for humans and agents *(Lane 2)*
+### 🔵 CC-6 Subnames for humans and agents *(Lane 2)* — DEFERRED (ENS cut)
 ```
 Write scripts/ens/setup-org.ts (viem): given the org name owner (from env), deploy a UserRegistry
 proxy via VerifiableFactory as the org's subregistry (setSubregistry), grant HitlEnsPublisher /
@@ -201,7 +208,7 @@ Implement suspension per the answer to Q5 in docs/DECISIONS.md.
 Fork/integration tests. No hard-coded addresses.
 ```
 
-### 🔵 CC-7 ENS reader *(Lane 2)*
+### 🔵 CC-7 ENS reader *(Lane 2)* — DEFERRED (ENS cut)
 ```
 Write app/lib/ens/read.ts using UniversalResolverV2 (viem) to resolve a human or agent name and
 return { address, stage, score (decayed client-side from hitl.score/updatedAt/decayPerSec),
@@ -276,7 +283,7 @@ Use the event's World ID for Agents dev environment (docs/DECISIONS.md Q8).
 Test: approved -> merge called; cancelled/expired/denied -> merge never called.
 ```
 
-### 🔵 CC-13 GitHub merge + receipt linkage *(Lane 4)*
+### 🔵 CC-13 GitHub merge + receipt linkage *(Lane 4)* — stretch
 ```
 app/lib/github/: create a branch + PR in the demo target repo with the agent's diff, compute the
 commit/tree hash we bind approvals to, and merge only through the protected-branch path (the
@@ -305,19 +312,23 @@ app/(pages)/session: prompt box -> agent proposal (diff viewer) -> Accept / Deny
 app/(pages)/forensics: list receipts; "Was the validation right? Yes / No" with evidence text and
 a major toggle (calls /api/forensics/audit); appeal and finalize buttons; live score/stage of the
 validator; penalty token metadata (decode tokenURI).
-app/(pages)/directory: org members and their agents resolved live from ENS (app/lib/ens/read.ts):
-name, stage, score, hitl.* permissions, expiry. No hard-coded values.
+app/(pages)/directory: org members read live from the contracts, not ENS: enrolled humans from
+HumanRegistry (Enrolled / EnrolledAttested / KeyRotated events; humanOf, accountOf, levelOf),
+permissions and expiries from PermissionRegistry (grantOf / activeValue), score and stage from
+PenaltyLedger (scoreOf / stageOf). Name = account address (or a local display label, never on-chain).
+Addresses from config/<chainId>.json. No hard-coded values.
 ```
 
-### 🔵 CC-17 Merge gate *(Lane 6)*
+### 🔵 CC-17 Merge gate *(Lane 6)* — stretch
 ```
 Write a GitHub Action (gate/ + .github/workflows/hitl-gate.yml in the DEMO TARGET repo template)
 that posts the required status check `hitl-gate`: success only if ValidationReceipts.canMerge(merger,
-repoId, commitHash) is true AND the validator's ENS hitl.stage < 3. Read addresses from config;
-RPC from secrets. Document the branch protection settings in docs/GATE.md.
+repoId, commitHash) is true AND PenaltyLedger.stageOf(validator's humanId) < 3 for every validator
+whose receipt counts. No ENS. Read addresses from config/<chainId>.json; RPC from secrets.
+Document the branch protection settings in docs/GATE.md.
 ```
 
-### 🔵 CC-18 Tests end to end *(Lane 7)*
+### 🔵 CC-18 Tests end to end *(Lane 7)* — stretch
 ```
 Playwright on a local stack (anvil + contracts deployed via CC-2 + app with mocked World ID):
 1 happy path (enroll -> prompt -> deny -> accept -> approve -> receipt -> merge -> audit wrong ->
@@ -351,5 +362,25 @@ fixes and regression tests. Finish docs/DEBRIEF.md from the log.
 - [ ] `forge test` green; no new medium/high Slither findings; AUDIT.md updated for new code
 - [ ] No secret in git history (gitleaks clean); no server key imported in a client component
 - [ ] Every World ID result verified server-side; every failure path leaves no receipt and no merge
-- [ ] ENS values come from resolution, never hard-coded; the gate reads ENS
+- [ ] Addresses come from `config/<chainId>.json`, never hard-coded; standing is read from the contracts (ENS cut)
 - [ ] docs/DEBRIEF.md has timestamps and the four required sections
+
+---
+
+## 4. Bonus: minimal ENS (only if ahead at Saturday 20:00 Madrid)
+
+Start this only if every non-stretch task is merged and deployed by **Saturday 20:00 Europe/Madrid**.
+It must not change audited contract logic: it plugs into the existing `PenaltyLedger` `IScorePublisher`
+hook (`setPublisher`), which is already `try/catch` with a gas cap and can never block a penalty.
+
+1. **Register the org name by script** on Sepolia: `scripts/ens/register-org.ts` using the ENSv2
+   `ETHRegistrar`, paying with `MockUSDC`. Take both addresses from
+   `ensdomains/contracts-v2` → `contracts/docs/addresses/sepolia.md` (they are marked not final:
+   read them at run time, don't copy them into code). Write them to `config/sepolia.ens.json`.
+2. **One subname per enrolled human**, `<label>.<org>.eth`, created by the enrollment service after a
+   successful enrollment.
+3. **One text record, `hitl.stage`**, written by a small new publisher contract implementing
+   `IScorePublisher`, set with `PenaltyLedger.setPublisher`. Keep it well under the 300k gas cap; add
+   it to AUDIT.md scope as a new file. `src/mirrors/ENSRoleMirror.sol` stays unused.
+
+Cut it immediately if the ENSv2 beta misbehaves; the submission does not depend on it.
