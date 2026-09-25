@@ -1,0 +1,74 @@
+{
+  "name": "regulated-fintech",
+  "description": "Audited environment. Live proof from tier 1, no self-approval, strict ladder, per-mark fee paid by the org treasury.",
+  "policy": {
+    "liveProofTier": 1,
+    "allowSelfApproval": false,
+    "flagCooldownDays": 3,
+    "flagStrikeWindowDays": 180,
+    "baselessFlagLimit": 2
+  },
+  "receipts": {
+    "liabilityWindowDays": 90,
+    "appealWindowDays": 7,
+    "attester": null
+  },
+  "penalties": {
+    "base": 150,
+    "majorMultiplier": 3,
+    "escalationPct": 150,
+    "maxScore": 2000,
+    "stage2At": 150,
+    "stage3At": 450,
+    "fadeDays": 60
+  },
+  "repos": [
+    {
+      "id": "bank/portal",
+      "tier": 1,
+      "requiredApprovals": 2
+    },
+    {
+      "id": "bank/ledger",
+      "tier": 3,
+      "requiredApprovals": 2
+    }
+  ],
+  "presets": {
+    "engineer": {
+      "durationDays": 30,
+      "grants": {
+        "AI_SUBMIT": 10,
+        "REPO_TIER": 1,
+        "APPROVE_DEPTH": 100,
+        "FLAG": 1
+      }
+    },
+    "senior": {
+      "durationDays": 30,
+      "grants": {
+        "AI_SUBMIT": 10,
+        "REPO_TIER": 3,
+        "APPROVE_DEPTH": 300,
+        "FLAG": 1
+      }
+    },
+    "release-manager": {
+      "durationDays": 30,
+      "grants": {
+        "REPO_TIER": 3,
+        "APPROVE_DEPTH": 300,
+        "MERGE_PROTECTED": 1,
+        "GRANT": 1,
+        "FLAG": 1
+      }
+    }
+  },
+  "fees": {
+    "token": "mock",
+    "byTier": {
+      "1": "0.5",
+      "3": "2"
+    }
+  }
+}
