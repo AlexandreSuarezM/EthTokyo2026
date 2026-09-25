@@ -5,7 +5,10 @@
 # Foundry (dependencies in contracts/lib are git submodules)
 out/
 cache/
-broadcast/*/31337/
+contracts/broadcast/*/31337/
+contracts/broadcast/*/*/dry-run/
+config/*.dry-run.json
+config/31337.json
 
 # Node / Next.js
 node_modules/
