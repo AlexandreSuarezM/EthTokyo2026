@@ -26,7 +26,8 @@ Paths are relative to `contracts/`.
 
 **Out of scope:**
 - `src/mocks/` (test-only);
-- `src/mirrors/ENSRoleMirror.sol` (ENSv1; to be replaced by the ENSv2 publisher);
+- `src/mirrors/ENSRoleMirror.sol` (ENSv1; unused and never deployed; ENS is cut from the current scope, and
+  the `IScorePublisher` hook in `PenaltyLedger` stays unset);
 - the off-chain orchestrator;
 - World ID itself;
 - OpenZeppelin libraries.
