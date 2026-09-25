@@ -19,7 +19,7 @@ Read `DESIGN.md` (model), `AUDIT.md` (security findings + trust assumptions), `d
 - `legacy/` the original Zone 1 orchestrator + local demo (reads `contracts/out`)
 - `app/` Next.js (App Router, TypeScript): UI, API routes, agent, attester, relayer
 - `scripts/` deployment + ENS setup
-- `config/<network>.json` addresses (never hard-code addresses in code)
+- `config/<chainId>.json` addresses, written by `contracts/script/Deploy.s.sol` (never hard-code addresses in code)
 - `environments/*.json` rule presets
 - `docs/` DECISIONS, RULES, TRUST, DEBRIEF, LIMITS, BUILD_PLAN
 

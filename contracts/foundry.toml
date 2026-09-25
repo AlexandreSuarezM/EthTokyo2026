@@ -12,6 +12,12 @@ remappings = [
   "forge-std/=lib/forge-std/src/",
 ]
 
+# Deploy.s.sol reads presets and writes deployed addresses
+fs_permissions = [
+  { access = "read", path = "../environments" },
+  { access = "write", path = "../config" },
+]
+
 [lint]
 lint_on_build = false
 
