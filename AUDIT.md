@@ -8,16 +8,21 @@
 
 ## 1. Scope
 
+**Revision 2 (task CC-1):** attested enrollment and key rotation in `HumanRegistry` (World ID 4.0
+verified off-chain by the backend, co-signed with EIP-712), credential levels (Orb, Selfie), and the
+Selfie cap on `REPO_TIER` in `PermissionRegistry`. New finding: L-05. New trust assumptions: C-08, C-09.
+Paths are relative to `contracts/`.
+
 | File | SHA-256 (first 16) | Notes |
 |---|---|---|
-| `src/HumanRegistry.sol` | `53270ed88f235fba` | one human, one account; key rotation |
-| `src/PermissionRegistry.sol` | `15b8672942d8c459` | expiring grants, presets, stage gating |
-| `src/ValidationReceipts.sol` | `193d3951311a7b9f` | receipts, forensics, appeals |
+| `src/HumanRegistry.sol` | `0ffa79bb4298eee6` | one human, one account; key rotation; on-chain or attested mode; credential level |
+| `src/PermissionRegistry.sol` | `0001faeefff38e46` | expiring grants, presets, stage gating, Selfie tier cap |
+| `src/ValidationReceipts.sol` | `0d20a241c29dca77` | receipts, forensics, appeals |
 | `src/PenaltyLedger.sol` | `7370194ace4695f5` | verdict token, decaying score, stages |
 | `src/WorldIDVerifier.sol` | `47cfbc9361772965` | World ID router adapter |
 | `src/interfaces/*.sol` | `dfdc…`, `c4eb…`, `6674…` | interfaces |
 
-1,168 lines in scope. Compiler: solc 0.8.28, `via_ir`, optimizer 200 runs, OpenZeppelin 5.1.0.
+1,312 lines in scope. Compiler: solc 0.8.28, `via_ir`, optimizer 200 runs, OpenZeppelin 5.1.0.
 
 **Out of scope:**
 - `src/mocks/` (test-only);
@@ -30,9 +35,9 @@
 
 1. **Manual review** of every function: access control, state transitions, arithmetic, external calls, reentrancy, signature handling, griefing, economic abuse, and trust assumptions.
 2. **Static analysis:** Slither 0.11.6, all 99 detectors. Each result is triaged in section 6.
-3. **Tests** (`forge test`): 55 tests, all passing:
-   - 45 unit tests, including a regression test for every fixed finding;
-   - 6 fuzz tests, 256 runs each;
+3. **Tests** (`forge test`): 75 tests, all passing:
+   - 64 unit tests, including a regression test for every fixed finding;
+   - 7 fuzz tests, 256 runs each;
    - 4 stateful invariants, 256 runs × 500 calls each (128,000 calls), with `fail_on_revert = true`.
 
 ## 3. Summary
@@ -41,9 +46,9 @@
 |---|---|---|---|---|
 | High | 0 | – | – | – |
 | Medium | 3 | 3 | – | – |
-| Low | 4 | 3 | 1 | – |
+| Low | 5 | 4 | 1 | – |
 | Informational | 5 | 3 | – | 2 |
-| Centralization / trust | 7 | – | – | 7 |
+| Centralization / trust | 9 | – | – | 9 |
 
 ## 4. Findings
 
@@ -80,6 +85,11 @@ Setting a fee token with `treasury = 0` made every validation revert, since Open
 **Fix:** `setFees` reverts with `ZeroTreasury`.
 **Test:** `test_L_ZeroTreasuryRejected`.
 
+### L-05 Two enrollment paths would give one person two accounts — **Fixed** (design review, revision 2)
+The on-chain path derives `humanId` from the World ID 3.x nullifier; the attested path takes the `humanId` the backend derives from a World ID 4.0 proof. The two values differ for the same person, so "one human, one account" holds within a path but not across them: with both paths open, a person could enroll one key on-chain and a second key through the attester, and hold two scores.
+**Fix:** the paths are exclusive, switched by the same setting as `ValidationReceipts`: `attester == 0` allows only `enroll`/`rotateKey` (`OnChainMode` otherwise); a nonzero attester allows only `enrollAttested`/`rotateKeyAttested` (`AttesterMode` otherwise). What remains, switching modes after people have enrolled, is recorded as C-08.
+**Test:** `test_L05_EnrollModesAreExclusive`.
+
 ### I-01 Interfaces not inherited — **Fixed**
 `PenaltyLedger` now inherits `IPenaltyMinter` and `IPenaltyStages`, so a signature drift fails at compile time rather than at runtime.
 
@@ -115,16 +125,24 @@ These are design choices, not bugs. For a production deployment, put `DEFAULT_AD
 | C-05 | Admin chooses who holds roles | The contracts enforce "enrolled human" and "not your own case", not who is competent |
 | C-06 | The attester (backend) is trusted in attester mode | The attester can't mint alone, since the validator's signature is also required, but it could co-sign without really verifying World ID. On-chain mode instead relies on World ID 3.x nullifier semantics. |
 | C-07 | `rotateKey` needs only a World ID proof | Compromising a person's World ID means taking over their account (and their score follows) |
+| C-08 | Admin can switch the enrollment mode (`setAttester`) | Humans enrolled in one mode keep their `humanId`; if the same person enrolls again after a switch, the other derivation gives them a second account (L-05). Pick one mode per deployment and don't switch once people have enrolled. |
+| C-09 | The attester (backend) is trusted for identity in attested mode | Unlike C-06, the attester acts **alone** here: a leaked or dishonest attester key can enroll unlimited fake humans at any credential level, and can move any human's account to a key it controls with `rotateKeyAttested`, since no signature from the old key is needed. Mitigations in place: signatures name the account (no front-running), expire, can't be replayed (used-digest set), and every change emits `EnrolledAttested` / `KeyRotatedAttested`. Keep the key server-only (ideally in a KMS/HSM), monitor those events, and consider a delay on attested rotation during which the old key can cancel. |
 
-## 6. Slither results after fixes (15, all triaged)
+## 6. Slither results after fixes (17, all triaged)
+
+Slither 0.11.6, run from `contracts/` with `--filter-paths "<abs>/lib|<abs>/test|<abs>/src/mocks"`. Revision 2 added two
+results (the `setAttester` zero-check and `_isSelfie` in the loop, below) and no Medium or High ones: the two
+`unused-return` results are the existing `perms.policy()` destructurings, now with one more field.
+Results in `src/mirrors/` (out of scope), `timestamp` and `naming-convention` are not listed.
 
 | Detector | Location | Verdict |
 |---|---|---|
 | `incorrect-equality` ×3 | `scoreOf`, `_stageFor`, `secondsUntilBelow` | Intended `== 0` checks on values not controlled by an attacker. False positive. |
 | `uninitialized-local` ×2 | `canMerge` `valid`, `solo` | Zero by default, as intended. False positive. |
 | `unused-return` ×2 | `perms.policy()` destructuring | Intended: only one field is needed. |
-| `missing-zero-check` | `setConfig._attester` | Zero means on-chain mode, intended. |
-| `calls-loop` ×4 | `canMerge`, `activeValue`, `_sync`, `_checkGranter` | Trusted contracts; views or admin-bounded loops. |
+| `missing-zero-check` ×2 | `ValidationReceipts.setConfig._attester`, `HumanRegistry.setAttester._attester` | Zero means on-chain mode, intended. |
+| `calls-loop` ×5 | `canMerge`, `activeValue`, `_sync`, `_checkGranter`, `_isSelfie` | Trusted contracts; views or admin-bounded loops. `_isSelfie` reads the immutable `HumanRegistry` and compares against a compile-time constant. |
+| `missing-inheritance` | `PermissionRegistry` / `IPenaltyStages` | It exposes `stageOf` for convenience but is not a stage source; inheriting would invite wiring it in as one. Intended. |
 | `reentrancy-events` ×2 | `_issuePenalty`, `_publish` | Events after a call to trusted/gas-capped contracts; state is written first. No impact. |
 | `timestamp` (excluded from list) | several | Windows are days long; validator timestamp drift of a few seconds is irrelevant. |
 
@@ -146,7 +164,11 @@ These are design choices, not bugs. For a production deployment, put `DEFAULT_AD
 | Config changes don't rewrite past decay | `test_ConfigChangeIsNotRetroactive` |
 | Due process before penalty; separate human hears the appeal | `test_PenaltyWaitsForAppealWindowThenFinalizes`, `test_AppealOverturnedByDifferentReviewer`, `test_M02_…` |
 | Signatures can't be replayed, tampered with or reused across approvals | `test_ReplayAndDuplicateBlocked`, `test_TamperedApprovalFails`, `test_AttesterModeNeedsBothSignatures` |
-| Score follows the human across key rotation | `test_KeyRotationKeepsScore` |
+| Score follows the human across key rotation | `test_KeyRotationKeepsScore`, `test_AttestedRotationKeepsLevelScoreAndPermissions` |
+| Attested enrollment: only the attester's signature, only for the named account, before the deadline, once | `test_AttestedEnrollHappyPath`, `test_AttestedEnrollWrongAttesterReverts`, `test_AttestedEnrollIsBoundToSender`, `test_AttestedEnrollTamperedLevelReverts`, `test_AttestedEnrollExpiredReverts`, `test_AttestedEnrollReplayReverts` |
+| One human, one account in attested mode too; one mode at a time | `test_SecondAccountForSameHumanReverts`, `test_EnrolledAccountCannotEnrollAgain`, `test_L05_EnrollModesAreExclusive` |
+| Attested rotation can't be replayed to move a human back to an old key | `test_AttestedRotationReplayReverts`, `test_AttestedRotationGuards` |
+| Selfie humans never exceed `maxTierForSelfie`, at grant or at read, and lowering the cap applies at once | `test_SelfieCapEnforcedInValidate`, `test_GrantAboveSelfieCapReverts`, `test_SelfieCapLoweredTakesEffectAtOnce`, `testFuzz_SelfieTierNeverAboveCap`, `test_OrbHumanIsNotCapped` |
 
 ## 8. Economics of the default rulebook
 
@@ -168,3 +190,4 @@ Defaults (`team-default`): base 100, major ×2, +100 % of current score, cap 100
 3. Decide on C-03 (cap forgiveness per call, or require two evaluators).
 4. Review the ENSv2 score publisher when it's written; it is the only planned new external call.
 5. Replace the World ID 3.x on-chain path with attester mode (World ID 4.0), and review the attester service itself.
+6. Attested mode (C-09): keep the attester key in a KMS/HSM, alert on `EnrolledAttested` and `KeyRotatedAttested`, and decide on a cancelable delay for attested key rotation. Don't switch enrollment modes after launch (C-08).

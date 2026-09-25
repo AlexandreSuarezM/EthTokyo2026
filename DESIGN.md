@@ -26,8 +26,8 @@ prompt ─► AI output ─► validator: deny (new input, context rebuilt) ─�
 
 | Contract | Role |
 |---|---|
-| `HumanRegistry` | World ID enrollment: one human, one account. Key rotation keeps the same `humanId`. |
-| `PermissionRegistry` | Expiring permissions (repo tier, change size, AI quota, merge, grant, flag), presets, repos, policy. **Reads** the penalty stage: stage 2 turns AI quota off, stage 3 turns every permission off. |
+| `HumanRegistry` | World ID enrollment: one human, one account. Key rotation keeps the same `humanId`. Two exclusive modes: on-chain (World ID 3.x proof) or attested (the backend verifies World ID 4.0 and co-signs an EIP-712 message). Records the credential level: Orb or Selfie. |
+| `PermissionRegistry` | Expiring permissions (repo tier, change size, AI quota, merge, grant, flag), presets, repos, policy. **Reads** the penalty stage: stage 2 turns AI quota off, stage 3 turns every permission off. A Selfie-level human's repo tier is capped at `policy.maxTierForSelfie`. |
 | `ValidationReceipts` | Validation receipts, forensics audits, flags, appeals, merge gate. Calls the ledger only when due process has ended. |
 | `PenaltyLedger` | The verdict token (soulbound ERC-721/5192) and the decaying score. |
 | `WorldIDVerifier` | World ID router adapter (swappable). |
@@ -81,5 +81,5 @@ Default numbers and recovery times are in `AUDIT.md` §8.
 ## 6. Not built yet
 
 - ENSv2 score publisher and permission records (Phase 3)
-- Backend attester for World ID 4.0 + human-in-the-loop SDK (Phase 4)
+- Backend attester service for World ID 4.0 + human-in-the-loop SDK (Phase 4); the contract side (attested enrollment, rotation and validation) is in place
 - `mirrors/ENSRoleMirror.sol` is ENSv1 and out of audit scope; it will be replaced

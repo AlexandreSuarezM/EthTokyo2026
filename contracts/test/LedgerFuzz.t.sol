@@ -29,7 +29,7 @@ abstract contract LedgerFixture is Test {
     function _setupHumans() internal {
         MockWorldID world = new MockWorldID();
         verifier = new WorldIDVerifier(world, "app", "act");
-        humans = new HumanRegistry(verifier);
+        humans = new HumanRegistry(verifier, address(this));
         for (uint256 i; i < 3; ++i) {
             address a = address(uint160(0x1000 + i));
             HumanProof memory p;

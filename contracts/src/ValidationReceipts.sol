@@ -227,7 +227,7 @@ contract ValidationReceipts is AccessControl, EIP712 {
         internal
         view
     {
-        (, bool allowSelf,,,) = perms.policy();
+        (, bool allowSelf,,,,) = perms.policy();
         if (!allowSelf && validatorHuman == submitterHuman) revert SelfApproval();
         if (!perms.has(validatorHuman, perms.REPO_TIER(), tier == 0 ? 1 : tier)) {
             revert InsufficientPermission(perms.REPO_TIER());
@@ -246,7 +246,7 @@ contract ValidationReceipts is AccessControl, EIP712 {
         HumanProof calldata live,
         Attestation calldata att
     ) internal view returns (bool isLive, bytes32 proofRef) {
-        (uint8 liveTier,,,,) = perms.policy();
+        (uint8 liveTier,,,,,) = perms.policy();
         bool needLive = tier >= liveTier;
 
         if (attester != address(0)) {

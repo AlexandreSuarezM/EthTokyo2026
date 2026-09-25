@@ -6,7 +6,8 @@
     "allowSelfApproval": true,
     "flagCooldownDays": 1,
     "flagStrikeWindowDays": 30,
-    "baselessFlagLimit": 5
+    "baselessFlagLimit": 5,
+    "maxTierForSelfie": 2
   },
   "receipts": {
     "liabilityWindowDays": 14,

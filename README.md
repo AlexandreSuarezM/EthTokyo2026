@@ -13,7 +13,7 @@ Open source under the [MIT license](LICENSE).
 ```
 contracts/          Foundry project (deps in contracts/lib are git submodules)
   src/              HumanRegistry, PermissionRegistry, ValidationReceipts, PenaltyLedger, WorldIDVerifier
-  test/             unit, fuzz and invariant tests (55)
+  test/             unit, fuzz and invariant tests (75)
 app/                Next.js (App Router, TypeScript): UI, API routes, agent, attester, relayer
 scripts/            deployment and ENS setup
 config/             per-network addresses (<network>.json)
@@ -30,7 +30,7 @@ Requires Foundry (`forge`, `anvil`) and Node 22+.
 git clone --recurse-submodules https://github.com/AlexandreSuarezM/EthTokyo2026.git
 # already cloned? git submodule update --init
 
-cd contracts && forge build && forge test     # 55 tests: unit, fuzz, invariants
+cd contracts && forge build && forge test     # 75 tests: unit, fuzz, invariants
 
 cd ../app && cp ../.env.example .env.local    # fill in values
 npm install && npm run dev

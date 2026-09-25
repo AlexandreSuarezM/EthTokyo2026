@@ -67,7 +67,7 @@ abstract contract Base is Test {
 
         world = new MockWorldID();
         verifier = new WorldIDVerifier(world, "app_hitl_demo", "hitl-approve");
-        humans = new HumanRegistry(verifier);
+        humans = new HumanRegistry(verifier, admin);
         perms = new PermissionRegistry(humans, admin);
         receipts = new ValidationReceipts(humans, perms, verifier, admin);
         ledger = new PenaltyLedger(humans, admin, _cfg());
@@ -82,7 +82,8 @@ abstract contract Base is Test {
                 allowSelfApproval: false,
                 flagCooldown: DAY,
                 flagStrikeWindow: 90 * DAY,
-                baselessFlagLimit: 2
+                baselessFlagLimit: 2,
+                maxTierForSelfie: 1
             })
         );
         perms.setRepo(REPO_WEB, 1, 1);

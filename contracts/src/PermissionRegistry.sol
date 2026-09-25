@@ -2,7 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
-import {HumanRegistry} from "./HumanRegistry.sol";
+import {HumanRegistry, CREDENTIAL_SELFIE} from "./HumanRegistry.sol";
 import {IRoleMirror} from "./interfaces/IHumanVerifier.sol";
 import {IPenaltyStages} from "./interfaces/IPenalty.sol";
 
@@ -13,6 +13,8 @@ import {IPenaltyStages} from "./interfaces/IPenalty.sol";
 ///        stage 2 -> AI_SUBMIT is inactive (no AI access)
 ///        stage 3 -> every permission is inactive (banned)
 ///      Stages lift by themselves as the score fades, so nothing here needs undoing.
+///      Credential level: a Selfie-level human's REPO_TIER is capped at policy.maxTierForSelfie
+///      when read, so lowering the cap takes effect at once without rewriting grants.
 contract PermissionRegistry is AccessControl {
     // ------------------------------------------------------------------ roles
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE"); //     orchestrator (quotas)
@@ -46,6 +48,7 @@ contract PermissionRegistry is AccessControl {
         uint64 flagCooldown; //     seconds FLAG is suspended after too many rejected flags
         uint64 flagStrikeWindow; // rejected-flag strikes older than this are forgotten
         uint8 baselessFlagLimit; // rejected flags before FLAG is suspended
+        uint8 maxTierForSelfie; //  highest REPO_TIER a Selfie-level human may hold (0 = no repo access)
     }
 
     struct Preset {
@@ -85,6 +88,7 @@ contract PermissionRegistry is AccessControl {
     error QuotaExceeded();
     error UnknownRepo();
     error LengthMismatch();
+    error AboveSelfieCap();
 
     constructor(HumanRegistry _humans, address admin) {
         humans = _humans;
@@ -158,6 +162,7 @@ contract PermissionRegistry is AccessControl {
 
     function _grant(bytes32 human, bytes32 perm, uint64 value, uint64 duration, bytes32 sponsor) internal {
         if (sponsor != bytes32(0) && sponsor == human) revert NotAllowedToGrant();
+        if (perm == REPO_TIER && value > policy.maxTierForSelfie && _isSelfie(human)) revert AboveSelfieCap();
         Grant storage g = _grants[human][perm];
         g.value = value;
         g.expiresAt = uint64(block.timestamp) + duration;
@@ -180,7 +185,15 @@ contract PermissionRegistry is AccessControl {
             if (stage >= 3) return 0; //                       banned
             if (stage >= 2 && perm == AI_SUBMIT) return 0; //  no AI access
         }
+        if (perm == REPO_TIER && _isSelfie(human)) {
+            uint64 cap = policy.maxTierForSelfie;
+            return g.value < cap ? g.value : cap;
+        }
         return g.value;
+    }
+
+    function _isSelfie(bytes32 human) internal view returns (bool) {
+        return humans.levelOf(human) == CREDENTIAL_SELFIE;
     }
 
     function has(bytes32 human, bytes32 perm, uint64 minValue) public view returns (bool) {
