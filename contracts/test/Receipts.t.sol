@@ -92,7 +92,7 @@ contract ReceiptsTest is Base {
         receipts.validate(a, sig, none, _noAtt());
 
         vm.prank(admin);
-        perms.setPolicy(PermissionRegistry.Policy(2, true, DAY, 90 * DAY, 2)); // your rulebook: always allowed
+        perms.setPolicy(PermissionRegistry.Policy(2, true, DAY, 90 * DAY, 2, 1)); // your rulebook: always allowed
         receipts.validate(a, sig, none, _noAtt());
     }
 

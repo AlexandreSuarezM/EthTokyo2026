@@ -40,7 +40,7 @@ export function penaltyConfig(p = DEFAULT_PENALTIES) {
 export async function deployAll({ admin, operator, worldIdRouter, penalties, appId = 'app_hitl_demo', action = 'hitl-approve' }) {
   const router = worldIdRouter ?? (await (await deploy(admin, 'Mocks.sol', 'MockWorldID')).getAddress());
   const verifier = await deploy(admin, 'WorldIDVerifier.sol', 'WorldIDVerifier', [router, appId, action]);
-  const humans = await deploy(admin, 'HumanRegistry.sol', 'HumanRegistry', [await verifier.getAddress()]);
+  const humans = await deploy(admin, 'HumanRegistry.sol', 'HumanRegistry', [await verifier.getAddress(), admin.address]);
   const perms = await deploy(admin, 'PermissionRegistry.sol', 'PermissionRegistry', [await humans.getAddress(), admin.address]);
   const receipts = await deploy(admin, 'ValidationReceipts.sol', 'ValidationReceipts', [
     await humans.getAddress(), await perms.getAddress(), await verifier.getAddress(), admin.address,
@@ -74,6 +74,7 @@ export async function applyEnvironment({ perms, receipts, ledger }, admin, env, 
     flagCooldown: BigInt(Math.round(p.flagCooldownDays * 86400)),
     flagStrikeWindow: BigInt(Math.round(p.flagStrikeWindowDays * 86400)),
     baselessFlagLimit: p.baselessFlagLimit,
+    maxTierForSelfie: p.maxTierForSelfie ?? 0,
   })).wait();
 
   const r = env.receipts;

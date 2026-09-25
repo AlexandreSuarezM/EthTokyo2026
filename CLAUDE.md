@@ -24,7 +24,7 @@ Read `DESIGN.md` (model), `AUDIT.md` (security findings + trust assumptions), `d
 - `docs/` DECISIONS, RULES, TRUST, DEBRIEF, LIMITS, BUILD_PLAN
 
 ## Commands
-- `cd contracts && forge build && forge test` (must stay green; currently 55 tests)
+- `cd contracts && forge build && forge test` (must stay green; currently 75 tests)
 - `cd app && npm run lint && npm run typecheck && npm test`
 - Local chain demo (legacy orchestrator): `cd contracts && forge build && cd ../legacy && npm install && node demo.js`
 
