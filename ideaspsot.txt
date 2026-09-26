@@ -14,3 +14,4 @@ Add a log for the submissions so ia is the one sending the code and the code aud
 Add diferent accountability scores team oriented. 
 
 
+Link etherscan verification of the transaction on the submision of bounty and the recivieng of rewards . 
