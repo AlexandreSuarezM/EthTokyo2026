@@ -31,3 +31,6 @@ hitl-attest.zip
 *.db-journal
 *.db-wal
 *.db-shm
+
+# Other lanes' git worktrees created inside the repo (never commit them)
+/EthTokyo2026-*/
