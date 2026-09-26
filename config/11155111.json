@@ -1,0 +1,18 @@
+{
+  "admin": "0x250FCfD7ecAD12d88e313D08E76f200F7119a81e",
+  "attester": "0x204Eed2c310A5EFB9f67F61a01bEcEC6acb02eFf",
+  "blockNumber": 11786771,
+  "chainId": 11155111,
+  "contracts": {
+    "HumanRegistry": "0x35d619cFb1a86DC537d42EE495c36f0c46Af4d30",
+    "PenaltyLedger": "0xA4730F419bea45Cd9afA538CAf36e23ec45AD679",
+    "PermissionRegistry": "0x32E48C4492457152DaB31bD2b37A83223C1a0eC0",
+    "ValidationReceipts": "0xF292d62DEa44171D883e2873d3D0688e6CBbD8De"
+  },
+  "deployer": "0x250FCfD7ecAD12d88e313D08E76f200F7119a81e",
+  "dryRun": false,
+  "environment": "demo",
+  "judge": "0x99fa6dc0ea8eE05816EF79b0380a7AfA68088328",
+  "operator": "0x99fa6dc0ea8eE05816EF79b0380a7AfA68088328",
+  "oracle": "0x99fa6dc0ea8eE05816EF79b0380a7AfA68088328"
+}
