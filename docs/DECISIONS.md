@@ -130,6 +130,15 @@ validator is identified by their EIP-712 signature. This replaces "relayer submi
 - `WORLD_ENVIRONMENT` (default `production`) is the only environment the server accepts; `staging` is for the
   simulator only.
 
+## The judge's power stays as is (2026-09-26 21:55)
+
+Considered and declined for the demo: permissionless slashing by code hash (it would require knowing the result in
+advance, with no room for mistakes), awards tied on-chain to receipts and signed reports, a challenge window.
+Rationale (user's decision): a user is slashed either because they messed up (that's the rules) or because the judge
+is corrupt; a corrupt judge quickly loses the validators' attention, and an unreviewed bounty pays nobody. The judge
+remains a documented trust assumption (AUDIT C-10, C-13; `docs/LIMITS.md`). Future hardening: several judges, a
+judge bond, a separate monitored judge key.
+
 ## Bounty and reward tokens (2026-09-26 20:30, replaces "Reward points and prize pool")
 
 Two contracts, replacing `ChallengeRewards`:
