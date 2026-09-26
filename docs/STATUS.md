@@ -25,7 +25,12 @@ Our own cut-off: **submit before Saturday 24:00 (Sunday 00:00) Madrid**, leaving
 - **Real World ID smoke test (`/dev/enroll`):** runs against the real verify API; blocked by
   `credential_unavailable` (no World ID 4.0 credential on our only World ID). Logged in `docs/DEBRIEF.md`.
 
-## Order for the rest of Saturday
+## DEMO_PLAN progress (see docs/DEMO_PLAN.md)
+
+- 13:35 Step 1 (contracts): count-based ladder + judge lift + `fadeSeconds`, demo preset; 100 forge + 137 app tests
+  green. Keys and Sepolia deploy: waiting for funding.
+
+## Order for the rest of Saturday (superseded by docs/DEMO_PLAN.md)
 
 1. Oracle service: the server compares its own knowledge with the validator's decision and calls
    `oraclePenalize` with evidence (reduced CC-11), plus standing reads (score, stage, penalties)

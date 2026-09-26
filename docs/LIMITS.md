@@ -7,6 +7,9 @@
   penalize any validator's real receipt inside the 365-day liability window (once per receipt, with an evidence
   hash, recorded on-chain). Acceptable for a single-user demo only; in production the oracle role stays unset or
   goes to a separate, monitored key (AUDIT C-10).
+- **Demo: the judge is the relayer, for minting and for lifting.** The same server key holds `ORACLE_ROLE`
+  (penalize) and `JUDGE_ROLE` (lift a restriction early). It can't undo a ban (3 tokens) or delete a token, but it
+  can lift any restriction and penalize any real receipt in the window (AUDIT C-10, C-12).
 - **Demo: `WORLD_ID_MODE=simulated` proves no humanity.** Simulated humans are enrolled without a World ID proof.
   They are marked on-chain (credential level 3, never Orb, capped like Selfie) and every API response says
   `simulated: true`, but nothing stops one person from enrolling several simulated wallets (AUDIT C-11).

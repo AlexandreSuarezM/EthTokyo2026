@@ -82,7 +82,12 @@ contract DeployTest is Test {
             assertEq(cap, vm.parseJsonUint(json, ".penalties.maxScore"));
             assertEq(s2, vm.parseJsonUint(json, ".penalties.stage2At"));
             assertEq(s3, vm.parseJsonUint(json, ".penalties.stage3At"));
-            assertEq(fade, vm.parseJsonUint(json, ".penalties.fadeDays") * 1 days);
+            assertEq(
+                fade,
+                vm.keyExistsJson(json, ".penalties.fadeSeconds")
+                    ? vm.parseJsonUint(json, ".penalties.fadeSeconds")
+                    : vm.parseJsonUint(json, ".penalties.fadeDays") * 1 days
+            );
 
             for (uint256 i; vm.keyExistsJson(json, string.concat(".repos[", vm.toString(i), "]")); ++i) {
                 string memory r = string.concat(".repos[", vm.toString(i), "]");
@@ -115,11 +120,26 @@ contract DeployTest is Test {
         assertEq(d.receipts.appealWindow(), 0);
         assertEq(d.receipts.liabilityWindow(), 365 days);
 
-        // two mistakes reach stage 2: base 100, then 100 + 100% of 100
-        (uint32 base,, uint32 escBps,, uint32 s2,, uint64 fade) = d.ledger.config();
-        assertLt(base, s2);
-        assertGe(base + base + (uint256(base) * escBps) / 10_000, s2);
-        assertEq(fade, 1 days);
+        // count-based ladder: any score restricts, fades in 5 minutes per base, 3 tokens = banned
+        (uint32 base,,,, uint32 s2,, uint64 fade) = d.ledger.config();
+        assertEq(base, 100);
+        assertEq(s2, 1);
+        assertEq(fade, 300);
+        (uint16 banAt, bool byCount) = d.ledger.ladder();
+        assertEq(banAt, 3);
+        assertTrue(byCount);
+        assertTrue(d.ledger.hasRole(d.ledger.JUDGE_ROLE(), operator)); // judge = relayer, both roles
+    }
+
+    function test_OtherPresetsHaveNoLadderAndNoJudge() public {
+        string[3] memory envs = ["team-default", "regulated-fintech", "solo-startup"];
+        for (uint256 e; e < envs.length; ++e) {
+            Deploy.Deployment memory d = script.deploy(_params(envs[e]));
+            (uint16 banAt, bool byCount) = d.ledger.ladder();
+            assertEq(banAt, 0);
+            assertFalse(byCount);
+            assertFalse(d.ledger.hasRole(d.ledger.JUDGE_ROLE(), operator));
+        }
     }
 
     function test_DeployFeesFromDecimalStrings() public {
