@@ -13,6 +13,7 @@ export const SERVER_ENV_VARS = [
   "GITHUB_TOKEN",
   "DATABASE_URL",
   "REPOS_ROOT",
+  "DEPLOYER_PRIVATE_KEY",
 ] as const;
 
 export const PUBLIC_ENV_VARS = ["NEXT_PUBLIC_WORLD_APP_ID"] as const;
@@ -22,6 +23,7 @@ const SECRET_VARS = [
   "WORLD_SIGNING_KEY",
   "ATTESTER_PRIVATE_KEY",
   "RELAYER_PRIVATE_KEY",
+  "DEPLOYER_PRIVATE_KEY",
   "SEPOLIA_RPC_URL",
   "GITHUB_TOKEN",
   "DATABASE_URL",
@@ -61,6 +63,8 @@ const serverSchema = z
       .regex(/^(file:|postgres(ql)?:\/\/)/, "must start with file: or postgres://"),
     // Local checkouts the server reads commits from: <REPOS_ROOT>/<owner>/<name>. Unset = approvals off.
     REPOS_ROOT: z.string().min(1).optional(),
+    // Demo only: the admin key grants the "validator" preset to a newly enrolled user (one call per user).
+    DEPLOYER_PRIVATE_KEY: privateKey.optional(),
   })
   .refine((e) => e.ATTESTER_PRIVATE_KEY.toLowerCase() !== e.RELAYER_PRIVATE_KEY.toLowerCase(), {
     path: ["RELAYER_PRIVATE_KEY"],

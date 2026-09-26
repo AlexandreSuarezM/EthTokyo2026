@@ -8,6 +8,8 @@ const address = z.string().refine((v) => isAddress(v, { strict: false }), "not a
 const schema = z.object({
   chainId: z.number().int().positive(),
   environment: z.string(),
+  blockNumber: z.number().int().nonnegative().optional(), // deploy block: where event scans start
+  operator: address.optional(), // relayer; in the demo also the judge
   dryRun: z.boolean(),
   attester: address,
   contracts: z.object({

@@ -36,20 +36,7 @@ export const ATTESTATION_TYPES = {
   ],
 } as const;
 
-export const APPROVAL_TYPES = {
-  HumanApproval: [
-    { name: "sessionId", type: "bytes32" },
-    { name: "repoId", type: "bytes32" },
-    { name: "commitHash", type: "bytes32" },
-    { name: "contextHash", type: "bytes32" },
-    { name: "modelId", type: "bytes32" },
-    { name: "submitter", type: "address" },
-    { name: "linesChanged", type: "uint32" },
-    { name: "rounds", type: "uint16" },
-    { name: "nonce", type: "uint256" },
-    { name: "deadline", type: "uint256" },
-  ],
-} as const;
+export { APPROVAL_TYPES } from "@/lib/chain/types";
 
 export type Domains = { chainId: number; humanRegistry: Address; validationReceipts: Address };
 

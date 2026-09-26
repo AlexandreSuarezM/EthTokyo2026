@@ -87,8 +87,9 @@ const defaultRandomId = () => toHex(crypto.getRandomValues(new Uint8Array(32))).
  */
 export function contextOf(
   p: { repo: string; task: string; feedback: string[]; round: number },
-  change: Pick<Change, "baseSha" | "headSha" | "diff">,
+  change: Pick<Change, "baseSha" | "headSha" | "diff" | "commitment">,
 ): Hex {
+  if (change.commitment) return change.commitment; // demo: hash(code, verdict, salt), sealed by the server
   const shown = {
     v: "hitl.context.v1",
     repo: p.repo,

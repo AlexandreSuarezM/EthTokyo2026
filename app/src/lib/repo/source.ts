@@ -16,6 +16,11 @@ export type Change = {
   diff: string;
   /** Lines added + removed (git diff --numstat). */
   linesChanged: number;
+  /**
+   * Demo only: a sealed commitment (hash of code, verdict and salt) used as the context hash, so the
+   * judge's verdict is fixed before the validator decides. Real repositories never set it.
+   */
+  commitment?: Hex;
 };
 
 export interface RepoSource {

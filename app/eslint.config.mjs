@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Fake AI answers: deliberately wrong code (one has a syntax error).
+    "demo-data/**",
   ]),
 ]);
 

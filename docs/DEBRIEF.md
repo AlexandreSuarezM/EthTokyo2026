@@ -57,4 +57,9 @@
     later proofs to an account, so a 3.0-only user can't use a session-based app at all.
   - Time spent so far: about 1.5 h from the first scan to this diagnosis. Time to first success: not reached yet.
 
+- **2026-09-26 — Free-tier RPC: `eth_getLogs` limited to 10 blocks.** Our Sepolia RPC answers "Under the Free tier
+  plan, you can make eth_getLogs requests with up to a 10 block range". Reading `Penalized` / `Forgiven` events from
+  the deploy block failed. Fix: no event scans. The judge is our server, so it records the token ids and lift
+  transactions it sends, and reads the mint time on-chain (`penaltyOf`).
+
 ## What worked well
