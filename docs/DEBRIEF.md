@@ -23,5 +23,18 @@
   (`rp_id`, `nonce`, `created_at`, `expires_at`, `signature`); only the integrate page does.
 - **2026-09-26 — Session requests:** that session requests are signed without an action is stated on the
   session-proofs page and in the `signRequest` type comments, not on the signatures page.
+- **2026-09-26 — Sessions vs uniqueness (CC-9):** the session-proofs page says a session "is not" a uniqueness
+  proof, so one-person-one-account needs two proofs at enrollment (a uniqueness proof, then `createSession`).
+  The page only shows `createSession` with `selfieCheck()`; that `proofOfHuman()` also works there is only
+  in the IDKit type comments. Nothing says whether two `createSession` calls by one person give the same
+  `session_id`.
+- **2026-09-26 — Verify response for sessions:** the API reference lists `action`, `nullifier` and
+  `session_id` as optional without saying which proof type returns which. We require `action` + `nullifier`
+  for uniqueness proofs and `session_id` for session proofs, and fail closed otherwise; to confirm with a
+  real proof.
+- **2026-09-26 — Binding a proof to a wallet:** `signal_hash` is optional in the result types. We always set a
+  signal (the wallet for the uniqueness proof, the pending enrollment for the session) and reject results
+  without it. The docs don't say whether the verify API checks the proof against the `signal_hash` we
+  forward, or only that it's well-formed.
 
 ## What worked well

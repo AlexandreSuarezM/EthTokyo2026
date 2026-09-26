@@ -1,26 +1,20 @@
-import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
-  createPublicClient,
-  createWalletClient,
   hashTypedData,
-  http,
   keccak256,
   recoverTypedDataAddress,
   stringToHex,
   toHex,
   zeroAddress,
-  type Abi,
-  type Address,
   type Hex,
   type PublicClient,
 } from "viem";
-import { privateKeyToAccount } from "viem/accounts";
-import { foundry } from "viem/chains";
+import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { humanRegistryAbi, validationReceiptsAbi } from "@/lib/chain/abi";
+import { hasChain, startChain, type TestChain } from "@/test/anvil";
 import {
   APPROVAL_TYPES,
   ATTESTATION_TYPES,
@@ -35,14 +29,7 @@ import {
 import { loadChainConfig } from "@/lib/chain/config";
 import { RelayError, createRelayer } from "@/lib/chain/relayer";
 
-// Anvil's well-known dev keys (public test accounts, never real funds).
-const KEYS = {
-  admin: "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
-  attester: "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d",
-  relayer: "0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a",
-  user: "0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6",
-} as const;
-const attesterAccount = privateKeyToAccount(KEYS.attester);
+const attesterAccount = privateKeyToAccount(generatePrivateKey());
 const randomBytes32 = () => toHex(crypto.getRandomValues(new Uint8Array(32)));
 
 describe("attester (offline)", () => {
@@ -59,7 +46,7 @@ describe("attester (offline)", () => {
 
   it("signs enrollments that recover to the attester, bound to the registry domain", async () => {
     const message = {
-      account: privateKeyToAccount(KEYS.user).address,
+      account: privateKeyToAccount(generatePrivateKey()).address,
       humanId: randomBytes32(),
       sessionRef: sessionRefOf("session_abc"),
       credentialLevel: 1 as const,
@@ -120,78 +107,21 @@ describe("loadChainConfig", () => {
   });
 });
 
-// ---------------------------------------------------------------------------------------------
-// Against the real contracts on anvil: ANVIL_RPC_URL, or an `anvil` binary on PATH, plus a
-// Foundry build in contracts/out. Skipped (with a note) when either is missing, e.g. in the
-// app CI job; the contracts job covers the Solidity side.
-const OUT = path.resolve(process.cwd(), "..", "contracts", "out");
-const hasArtifacts = existsSync(path.join(OUT, "HumanRegistry.sol", "HumanRegistry.json"));
-const hasAnvil = !!process.env.ANVIL_RPC_URL || spawnSync("anvil", ["--version"]).status === 0;
-if (!hasArtifacts || !hasAnvil) {
-  console.warn("chain.test: on-chain tests skipped (need contracts/out and anvil or ANVIL_RPC_URL)");
-}
-
-function bytecode(name: string): Hex {
-  const json = JSON.parse(readFileSync(path.join(OUT, `${name}.sol`, `${name}.json`), "utf8"));
-  return json.bytecode.object as Hex;
-}
-
-describe.skipIf(!hasArtifacts || !hasAnvil)("on-chain (anvil)", () => {
-  let child: ChildProcess | undefined;
-  let rpcUrl: string;
+describe.skipIf(!hasChain)("on-chain (anvil)", () => {
+  let chain: TestChain;
   let client: PublicClient;
   let domains: Domains;
 
   beforeAll(async () => {
-    rpcUrl = process.env.ANVIL_RPC_URL ?? "";
-    if (!rpcUrl) {
-      const port = 20000 + Math.floor(Math.random() * 20000);
-      child = spawn("anvil", ["--port", String(port), "--silent"], { stdio: "ignore" });
-      rpcUrl = `http://127.0.0.1:${port}`;
-    }
-    client = createPublicClient({ chain: foundry, transport: http(rpcUrl) });
-    for (let i = 0; ; i++) {
-      try {
-        await client.getChainId();
-        break;
-      } catch (e) {
-        if (i > 50) throw e;
-        await new Promise((r) => setTimeout(r, 100));
-      }
-    }
-
-    const admin = createWalletClient({ account: privateKeyToAccount(KEYS.admin), chain: foundry, transport: http(rpcUrl) });
-    const deploy = async (name: string, abi: Abi, args: unknown[]) => {
-      const hash = await admin.deployContract({ abi, bytecode: bytecode(name), args });
-      const { contractAddress } = await client.waitForTransactionReceipt({ hash });
-      return contractAddress as Address;
-    };
-    const verifier = "0x0000000000000000000000000000000000000001";
-    const humanRegistry = await deploy("HumanRegistry", humanRegistryAbi, [verifier, admin.account.address]);
-    const perms = "0x0000000000000000000000000000000000000002"; // not called by the paths under test
-    const validationReceipts = await deploy("ValidationReceipts", validationReceiptsAbi, [
-      humanRegistry,
-      perms,
-      verifier,
-      admin.account.address,
-    ]);
-    const hash = await admin.writeContract({
-      address: humanRegistry,
-      abi: humanRegistryAbi,
-      functionName: "setAttester",
-      args: [attesterAccount.address],
-    });
-    await client.waitForTransactionReceipt({ hash });
-    domains = { chainId: foundry.id, humanRegistry, validationReceipts };
+    chain = await startChain(attesterAccount.address);
+    ({ client, domains } = chain);
   }, 30_000);
 
-  afterAll(() => {
-    child?.kill();
-  });
+  afterAll(() => chain?.stop());
 
   it("computes the same EIP-712 digests as the contracts", async () => {
     const enroll = {
-      account: privateKeyToAccount(KEYS.user).address,
+      account: privateKeyToAccount(generatePrivateKey()).address,
       humanId: randomBytes32(),
       sessionRef: randomBytes32(),
       credentialLevel: 2 as const,
@@ -261,13 +191,9 @@ describe.skipIf(!hasArtifacts || !hasAnvil)("on-chain (anvil)", () => {
   });
 
   it("enrolls a human with an attester signature sent from the human's own wallet", async () => {
-    const user = createWalletClient({ account: privateKeyToAccount(KEYS.user), chain: foundry, transport: http(rpcUrl) });
     const attester = createAttester(attesterAccount, domains);
-    // Fresh account per run so the test also works against a long-lived anvil (ANVIL_RPC_URL).
-    const account = privateKeyToAccount(randomBytes32());
-    const fund = await user.sendTransaction({ to: account.address, value: 10n ** 17n });
-    await client.waitForTransactionReceipt({ hash: fund });
-    const wallet = createWalletClient({ account, chain: foundry, transport: http(rpcUrl) });
+    const wallet = await chain.newWallet();
+    const account = wallet.account;
 
     const humanId = randomBytes32();
     const sessionRef = sessionRefOf("session_test");
@@ -290,7 +216,7 @@ describe.skipIf(!hasArtifacts || !hasAnvil)("on-chain (anvil)", () => {
   });
 
   it("relayer: a call that would revert becomes a typed error and no transaction", async () => {
-    const wallet = createWalletClient({ account: privateKeyToAccount(KEYS.relayer), chain: foundry, transport: http(rpcUrl) });
+    const wallet = await chain.newWallet();
     const relayer = createRelayer({ wallet, publicClient: client, receipts: domains.validationReceipts });
     const nonceBefore = await client.getTransactionCount({ address: relayer.address });
 

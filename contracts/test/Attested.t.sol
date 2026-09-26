@@ -117,6 +117,15 @@ contract AttestedTest is Base {
         humans.enrollAttested(H_DAVE, SESSION, ORB, deadline, sig);
     }
 
+    function test_AttestedEnrollIsBoundToChain() public {
+        uint256 deadline = block.timestamp + 10 minutes;
+        bytes memory sig = _enrollSig(attesterPk, dave, H_DAVE, SESSION, ORB, deadline);
+        vm.chainId(block.chainid + 1); // same contract address on another chain (e.g. a fork)
+        vm.prank(dave);
+        vm.expectRevert(HumanRegistry.BadAttestation.selector);
+        humans.enrollAttested(H_DAVE, SESSION, ORB, deadline, sig);
+    }
+
     function test_AttestedEnrollTamperedLevelReverts() public {
         uint256 deadline = block.timestamp + 10 minutes;
         bytes memory sig = _enrollSig(attesterPk, dave, H_DAVE, SESSION, SELFIE, deadline);
