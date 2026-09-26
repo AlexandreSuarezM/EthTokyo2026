@@ -103,6 +103,11 @@ Out of scope (ENS cut, see `docs/RULES.md`). Q5–Q7 are not answered.
 
 Sepolia. Addresses come from `config/<chainId>.json`, written by `contracts/script/Deploy.s.sol`.
 
+**Who sends which transaction (found in CC-8):** `HumanRegistry.enrollAttested` and `rotateKeyAttested`
+enroll `msg.sender`, so the **human's own wallet** sends them, with the attester's signature from the backend.
+The relayer can't (it would enroll itself). The relayer only submits `ValidationReceipts.validate`, where the
+validator is identified by their EIP-712 signature. This replaces "relayer submits" in BUILD_PLAN CC-9.
+
 ## Agent and model
 
 See Q1, Q4 and Q8.

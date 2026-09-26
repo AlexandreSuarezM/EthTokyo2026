@@ -25,3 +25,9 @@ coverage/
 # Local leftovers (kept on disk, never committed)
 hitl-attest/
 hitl-attest.zip
+
+# Local SQLite database (DATABASE_URL=file:./dev.db)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
