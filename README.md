@@ -8,6 +8,11 @@ escalating, capped and fading, with three stages (published score, no AI access,
 Read [DESIGN.md](DESIGN.md) for how it works and [AUDIT.md](AUDIT.md) for the security review.
 Open source under the [MIT license](LICENSE).
 
+**Scope:** targets World IDKit and World ID for Agents. Scores and stages are published on-chain
+(`PenaltyLedger` events and `tokenURI`). ENS publishing is future work: the `IScorePublisher` hook in
+`PenaltyLedger` exists, so an ENS publisher can be added later without changing audited logic.
+Status and deadline: [docs/STATUS.md](docs/STATUS.md).
+
 ## Layout
 
 ```
@@ -15,7 +20,7 @@ contracts/          Foundry project (deps in contracts/lib are git submodules)
   src/              HumanRegistry, PermissionRegistry, ValidationReceipts, PenaltyLedger, WorldIDVerifier
   test/             unit, fuzz and invariant tests (75)
 app/                Next.js (App Router, TypeScript): UI, API routes, agent, attester, relayer
-scripts/            deployment and ENS setup
+scripts/            deployment (ENS setup is future work)
 config/             deployed addresses per chain (<chainId>.json)
 environments/       rule presets: policy, receipt windows, penalty rules, repos, presets, fees
 legacy/             original Zone 1 orchestrator + end-to-end local demo

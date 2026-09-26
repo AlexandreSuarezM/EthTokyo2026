@@ -2,23 +2,32 @@
 
 ## What this project is
 Human-in-the-loop accountability for AI-written code, built for ETHGlobal Tokyo 2026
-(World: IDKit + World ID for Agents; ENS: ENSv2 on Sepolia).
+(target prizes: World IDKit and World ID for Agents; ENS is deferred, see "Current scope").
 
 1. Users enroll with World ID (one human = one account).
 2. A user prompts an AI agent; the agent proposes a change; the validator accepts, or denies with new input.
 3. On accept, the validator is verified by World ID **at that moment** and a **receipt** is recorded (no token).
 4. Later, forensics audits the receipt. If the validation was wrong (after due process),
    a **soulbound penalty token** is minted to the validator and their score rises.
-5. Score → stage: 1 = score published on ENS, 2 = no AI access, 3 = banned. The score fades over time.
+5. Score → stage: 1 = score published, 2 = no AI access, 3 = banned. The score fades over time.
 
-Read `DESIGN.md` (model), `AUDIT.md` (security findings + trust assumptions), `docs/BUILD_PLAN.md` (tasks).
+Read `DESIGN.md` (model), `AUDIT.md` (security findings + trust assumptions), `docs/BUILD_PLAN.md` (tasks),
+`docs/STATUS.md` (deadline, what's done, today's order).
+
+## Current scope
+- **ENS is out of scope** (time + ENSv2 beta instability). Don't build ENS features unless the task is the
+  BUILD_PLAN "Bonus" section, and only after Saturday 20:00 Madrid with everything else done.
+- Stage 1 ("score published") = published **on-chain**: `PenaltyLedger` `Penalized` / `Forgiven` events and
+  the on-chain `tokenURI` (current score + stage). Reads go to `PenaltyLedger.scoreOf` / `stageOf`.
+- ENS publishing is future work: the `IScorePublisher` hook in `PenaltyLedger` exists and stays unset.
+- `src/mirrors/ENSRoleMirror.sol` (ENSv1) stays out of audit scope and unused: don't deploy or wire it.
 
 ## Layout (target monorepo)
 - `contracts/` Foundry: `HumanRegistry`, `PermissionRegistry`, `ValidationReceipts`, `PenaltyLedger`, `WorldIDVerifier`
   (deps in `contracts/lib` are git submodules: clone with `--recurse-submodules`)
 - `legacy/` the original Zone 1 orchestrator + local demo (reads `contracts/out`)
 - `app/` Next.js (App Router, TypeScript): UI, API routes, agent, attester, relayer
-- `scripts/` deployment + ENS setup
+- `scripts/` deployment (ENS setup deferred)
 - `config/<chainId>.json` addresses, written by `contracts/script/Deploy.s.sol` (never hard-code addresses in code)
 - `environments/*.json` rule presets
 - `docs/` DECISIONS, RULES, TRUST, DEBRIEF, LIMITS, BUILD_PLAN

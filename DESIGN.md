@@ -19,7 +19,7 @@ prompt ─► AI output ─► validator: deny (new input, context rebuilt) ─�
                                         ▼
                                PENALTY TOKEN minted to the validator
                                score += escalating weight (capped), fades over time
-                               stage 1: score published (ENS) · 2: no AI access · 3: banned
+                               stage 1: score published (on-chain) · 2: no AI access · 3: banned
 ```
 
 ## 2. Contracts
@@ -55,7 +55,7 @@ Repeated mistakes grow fast, because the current score feeds the next weight, an
 | Stage | Condition | Effect |
 |---|---|---|
 | 0 | score = 0 | clean |
-| 1 | score > 0 | losing score, to be published on ENS (publisher hook in place; the ENSv2 implementation is Phase 3) |
+| 1 | score > 0 | losing score, published on-chain (`Penalized` / `Forgiven` events, `tokenURI`); ENS publishing is future work (the publisher hook exists, unset) |
 | 2 | score ≥ `stage2At` | no AI access (`AI_SUBMIT` inactive) |
 | 3 | score ≥ `stage3At` | banned: cannot validate, prompt, flag, grant or merge |
 
@@ -80,6 +80,6 @@ Default numbers and recovery times are in `AUDIT.md` §8.
 
 ## 6. Not built yet
 
-- ENSv2 score publisher and permission records (Phase 3)
+- ENS publishing (future work, out of the current scope): an ENSv2 score publisher plugs into the existing `IScorePublisher` hook without changing audited logic
 - Backend attester service for World ID 4.0 + human-in-the-loop SDK (Phase 4); the contract side (attested enrollment, rotation and validation) is in place
-- `mirrors/ENSRoleMirror.sol` is ENSv1 and out of audit scope; it will be replaced
+- `mirrors/ENSRoleMirror.sol` is ENSv1, out of audit scope and unused; it will be replaced if ENS returns
