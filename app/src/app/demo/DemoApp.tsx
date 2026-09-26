@@ -2,9 +2,9 @@
 
 import { CredentialRequest, IDKitRequestWidget, IDKitSessionWidget, type IDKitErrorCodes, type RpContext } from "@worldcoin/idkit";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { createPublicClient, createWalletClient, custom, type Address, type Hex } from "viem";
+import { createPublicClient, createWalletClient, custom, formatEther, type Address, type Hex } from "viem";
 import { sepolia } from "viem/chains";
-import { humanRegistryAbi } from "@/lib/chain/abi";
+import { challengeRewardsAbi, humanRegistryAbi } from "@/lib/chain/abi";
 import { APPROVAL_TYPES } from "@/lib/chain/types";
 import { enrollSignal } from "@/lib/world/identity";
 
@@ -15,6 +15,20 @@ type Config = {
   explorer: string | null;
   contracts: { HumanRegistry: Address; PermissionRegistry: Address; ValidationReceipts: Address; PenaltyLedger: Address };
   judge: Address | null;
+  rewards: Address | null;
+};
+type Rewards = {
+  points: number;
+  threshold: number;
+  cooldown: number;
+  secondsUntilNextPoint: number;
+  optedIn: boolean;
+  claimed: boolean;
+  optedInCount: number;
+  deadline: number;
+  poolWei: string;
+  shareWei: string;
+  contract: Address;
 };
 
 type Answer = { id: string; round: number; code: string; task: string; linesChanged: number; commitHash: Hex };
@@ -27,8 +41,16 @@ type Standing = {
   restrictedSeconds: number;
   penalties: { tokenId: string; receiptId: string; mintedAt: number; txHash: Hex; lifted: boolean }[];
   receipts: { receiptId: string; txHash: Hex; createdAt: number; judged: Judged | null }[];
+  rewards: Rewards | null;
 };
-type JudgeResult = Judged & { receiptId: string; salt: Hex; commitment: Hex; fingerprintMatches: boolean; alreadyJudged: boolean };
+type JudgeResult = Judged & {
+  receiptId: string;
+  salt: Hex;
+  commitment: Hex;
+  fingerprintMatches: boolean;
+  alreadyJudged: boolean;
+  reward: null | { awarded: boolean; note: string; txHash: Hex | null };
+};
 type Attestation = { humanId: Hex; sessionRef: Hex; credentialLevel: number; deadline: string; signature: Hex; humanRegistry: Address };
 type Prepared = {
   approvalId: string;
@@ -246,6 +268,19 @@ export default function DemoApp({ config, appId }: { config: Config; appId: `app
     }
   }
 
+  /** Prize actions are sent by the user's own wallet (ChallengeRewards.optIn / claim). */
+  const rewardTx = (fn: "optIn" | "claim", label: string, done: string) =>
+    run(label, async () => {
+      const { wallet, pub } = clients();
+      setBusy(`Confirm in MetaMask: ${fn}…`);
+      const hash = await wallet.writeContract({ account: account!, chain: sepolia, address: config.rewards!, abi: challengeRewardsAbi, functionName: fn });
+      setBusy("Waiting for Sepolia…");
+      const r = await pub.waitForTransactionReceipt({ hash });
+      if (r.status !== "success") throw new Error(`${fn} reverted`);
+      await refresh();
+      setNotice(`${done} tx ${short(hash)}`);
+    });
+
   const lift = () =>
     run("The judge is lifting the restriction…", async () => {
       const r = await api<{ txHash: Hex }>("/api/demo/lift", { account, reason });
@@ -330,6 +365,11 @@ export default function DemoApp({ config, appId }: { config: Config; appId: `app
               <div style={{ fontSize: 13 }}>
                 Fingerprint matches ✓ <code>hash(code, &quot;{lastJudge.verdict}&quot;, salt {short(lastJudge.salt)}) = {short(lastJudge.commitment)}</code> = contextHash on-chain
               </div>
+              {lastJudge.reward && (
+                <div style={{ fontSize: 14, marginTop: 4, color: lastJudge.reward.awarded ? C.green : lastJudge.verdict === "wrong" ? C.red : "#57606a" }}>
+                  ★ {lastJudge.reward.note} {lastJudge.reward.txHash && link("tx", lastJudge.reward.txHash, "tx")}
+                </div>
+              )}
               {lastJudge.verdict === "right" ? (
                 <div style={{ color: C.green, fontWeight: 700, marginTop: 6 }}>Good decision ✓</div>
               ) : (
@@ -375,6 +415,37 @@ export default function DemoApp({ config, appId }: { config: Config; appId: `app
                 </div>
               )}
               {status === "banned" && <p style={{ color: C.red, fontSize: 14 }}>3 tokens: banned for good. A ban can&apos;t be lifted, not even by the judge.</p>}
+              {s.rewards && (
+                <div style={{ marginTop: 14, paddingTop: 10, borderTop: "1px solid #d0d7de" }}>
+                  <div style={{ fontWeight: 600 }}>
+                    ★ Reward points: {s.rewards.points} / {s.rewards.threshold}
+                    {s.rewards.optedIn && <span style={{ color: C.green }}> · in the prize ✓</span>}
+                  </div>
+                  <div style={{ fontSize: 13, color: "#57606a" }}>
+                    +1 per correct approval, at most one per {mmss(s.rewards.cooldown)} (difficulty) · next point{" "}
+                    {s.rewards.secondsUntilNextPoint > 0 ? `in ${mmss(s.rewards.secondsUntilNextPoint)}` : "available"}
+                    <br />
+                    Prize pool {formatEther(BigInt(s.rewards.poolWei))} ETH · {s.rewards.optedInCount} qualified · deadline{" "}
+                    {new Date(s.rewards.deadline * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                    {" · "}
+                    {config.explorer && link("address", s.rewards.contract, "contract")}
+                  </div>
+                  {!s.rewards.optedIn && Date.now() / 1000 <= s.rewards.deadline && (
+                    <Btn color="#bf8700" disabled={!!busy || s.rewards.points < s.rewards.threshold} onClick={() => rewardTx("optIn", "Opting in…", "You are in the prize ✓")}>
+                      Opt in to the prize
+                    </Btn>
+                  )}
+                  {s.rewards.optedIn && !s.rewards.claimed && Date.now() / 1000 > s.rewards.deadline && (
+                    <Btn color={C.green} disabled={!!busy} onClick={() => rewardTx("claim", "Claiming…", "Prize share claimed ✓")}>
+                      Claim {formatEther(BigInt(s.rewards.shareWei))} ETH
+                    </Btn>
+                  )}
+                  {s.rewards.claimed && <div style={{ color: C.green }}>Prize share claimed ✓</div>}
+                  <div style={{ fontSize: 12, color: "#57606a", marginTop: 4 }}>
+                    Points are soulbound. Approving wrong code slashes them all; once in the prize, your share is kept.
+                  </div>
+                </div>
+              )}
             </>
           )}
         </section>

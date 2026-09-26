@@ -1,0 +1,9 @@
+{
+  "ChallengeRewards": "0x9d918d9f1Aa9Ae0a88679858718D0191973EC270",
+  "blockNumber": 11786994,
+  "chainId": 11155111,
+  "cooldown": 60,
+  "deadline": 1790456400,
+  "judge": "0x99fa6dc0ea8eE05816EF79b0380a7AfA68088328",
+  "threshold": 5
+}
