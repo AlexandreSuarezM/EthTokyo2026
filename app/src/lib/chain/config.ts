@@ -43,24 +43,27 @@ export function loadChainConfig(chainId: number, dir: string = CONFIG_DIR): Chai
   return cfg;
 }
 
-const rewardsSchema = z.object({
+const bountySchema = z.object({
   chainId: z.number().int().positive(),
-  ChallengeRewards: address,
-  deadline: z.number().int().positive(),
+  Bounty: address,
+  RewardToken: address,
+  claimOpensAt: z.number().int().nonnegative(),
   cooldown: z.number().int().nonnegative(),
   threshold: z.number().int().positive(),
+  codeHash: z.string(),
+  codeURI: z.string(),
 });
-export type RewardsConfig = z.infer<typeof rewardsSchema>;
+export type BountyConfig = z.infer<typeof bountySchema>;
 
-/** Optional ChallengeRewards deployment (config/<chainId>.rewards.json, written by DeployRewards.s.sol). */
-export function loadRewardsConfig(chainId: number, dir: string = CONFIG_DIR): RewardsConfig | null {
+/** Optional Bounty + RewardToken deployment (config/<chainId>.bounty.json, written by DeployBounty.s.sol). */
+export function loadBountyConfig(chainId: number, dir: string = CONFIG_DIR): BountyConfig | null {
   let raw: unknown;
   try {
-    raw = JSON.parse(readFileSync(path.join(dir, `${chainId}.rewards.json`), "utf8"));
+    raw = JSON.parse(readFileSync(path.join(dir, `${chainId}.bounty.json`), "utf8"));
   } catch {
     return null;
   }
-  const cfg = rewardsSchema.parse(raw);
-  if (cfg.chainId !== chainId) throw new Error(`config/${chainId}.rewards.json is for chain ${cfg.chainId}`);
+  const cfg = bountySchema.parse(raw);
+  if (cfg.chainId !== chainId) throw new Error(`config/${chainId}.bounty.json is for chain ${cfg.chainId}`);
   return cfg;
 }

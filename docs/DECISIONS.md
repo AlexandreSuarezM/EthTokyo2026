@@ -130,21 +130,36 @@ validator is identified by their EIP-712 signature. This replaces "relayer submi
 - `WORLD_ENVIRONMENT` (default `production`) is the only environment the server accepts; `staging` is for the
   simulator only.
 
-## Reward points and prize pool (2026-09-26 15:00)
+## Bounty and reward tokens (2026-09-26 20:30, replaces "Reward points and prize pool")
 
-Two tokens: the **accountability token** (PenaltyLedger: minted for approving wrong code, permanent, 3 = banned) and
-**reward points** (new `contracts/src/ChallengeRewards.sol`, separate so the audited contracts are untouched).
-- **Earn:** the judge awards **1 point** for a real receipt it ruled correct: once per receipt, only to that receipt's
-  validator (status Valid/Cleared), and **at most one point per `cooldown`** (the challenge difficulty in hours; 60 s
-  in the demo so it can be recorded). Points are soulbound: the contract has no transfer function at all.
-- **Slash:** the judge (automatically, when it mints an accountability token) or the owner sets a human's points to 0.
-- **Prize:** ETH funded by the owner. A human with **>= 5 points** opts in before the deadline; that is final (a later
-  slash takes the points, never the share). After the deadline each opted-in human claims an **equal share**. If
-  nobody opted in, the owner withdraws the pool.
-- **Sepolia:** `config/11155111.rewards.json` (`0x9d918d9f1Aa9Ae0a88679858718D0191973EC270`), pool 0.02 ETH, deadline
-  21:00 Madrid 26 Sep, cooldown 60 s, threshold 5, judge = relayer. A first deployment
-  (`0xAb95C5258d8633b9434f5e6E4D341E2167733753`) was used by the Sepolia smoke test; its throwaway wallet opted in and
-  its key is gone, so that pool (0.02 test ETH) is stuck: not used by the demo.
+Two contracts, replacing `ChallengeRewards`:
+- **`RewardToken`**: soulbound balances (no transfer function), keyed by humanId. **One shared cooldown per human
+  across every bounty** (30 s in the demo): two bounties can't be farmed in parallel. Minted only by bounties
+  (`MINTER_ROLE`); slashed to 0 by the judge (`JUDGE_ROLE`) or the owner.
+- **`Bounty`**: one code challenge (`codeHash` + `codeURI` link to the code) with an ETH prize. The judge awards
+  **+1 token per reviewed code sample** (once per sample id, enrolled humans only). A human with **>= 5 tokens**
+  qualifies (final: a later slash keeps the seat). From `claimOpensAt`, each qualified human claims
+  `balance / (qualified - claimed)`: an equal split when everyone qualified before claims open. If nobody
+  qualified, the owner withdraws.
+
+Demo rules (the user's table):
+
+| Code | User | Result |
+|---|---|---|
+| works | Approve | +1 token |
+| works | Report | +1 token (never punished) |
+| fails | Report | +1 token |
+| fails | Approve | +1 token, then the judge **slashes all tokens** |
+| any | Skip | nothing |
+
+- A token is only granted if the shared cooldown has passed. Report = the red button, signed by the user's wallet
+  (one authentication per sample); Approve = CC-10 (World ID per `WORLD_ID_MODE` + wallet signature + receipt).
+- **The penalty NFT ladder is not used in the demo** (no restriction, no ban): mistakes only slash reward tokens.
+  PenaltyLedger, the ladder and the judge lift stay deployed and tested.
+- **Sepolia:** `config/11155111.bounty.json`: RewardToken `0xD5CDd7f50fb022ea0403ECbeC8F2C7F1a4cFBeae`, Bounty
+  `0x882C6095C009EE63EB725B28C590034ae19F75A3`, pool **0.01 ETH** (0.1 ETH in the design; the deployer had 0.016),
+  claims open at deploy + 1 s (convenience), cooldown 30 s, threshold 5, judge = relayer.
+- The two earlier `ChallengeRewards` deployments (`0xAb95…3753`, `0x9d91…C270`, 0.02 test ETH each) are abandoned.
 
 ## Demo ladder and judge (DEMO_PLAN step 1, 2026-09-26 13:30)
 

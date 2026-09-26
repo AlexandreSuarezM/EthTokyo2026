@@ -9,7 +9,7 @@ import type { ValidateArgs } from "@/lib/chain/relayer";
 import { sqliteDriver } from "@/lib/db/drivers";
 import { createStore, type Store } from "@/lib/db/store";
 import { DEMO_REPO, commitmentOf, loadVariants, withDemoRepo, type Coin } from "@/lib/demo/ai";
-import { ask, judge, lift, onboard, prepare, reject, standing, type ChainReads, type DemoDeps } from "@/lib/demo/service";
+import { ask, judge, lift, onboard, prepare, reject, reportMessage, standing, type ChainReads, type DemoDeps } from "@/lib/demo/service";
 import { noRepoSource } from "@/lib/repo/source";
 import { completeApproval } from "@/lib/world/approve";
 import { WorldError } from "@/lib/world/errors";
@@ -44,7 +44,8 @@ type World = {
   user: ReturnType<typeof privateKeyToAccount>;
   human: Hex;
   chainState: { stage: number; banned: boolean; enrolled: boolean; validator: boolean; contexts: Map<bigint, Hex> };
-  calls: { penalize: [bigint, Hex][]; lift: [Hex, Hex][]; grant: Hex[] };
+  calls: { penalize: [bigint, Hex][]; lift: [Hex, Hex][]; grant: Hex[]; award: Hex[]; slash: Hex[] };
+  cooldown: { on: boolean };
 };
 
 async function world(flips: boolean[] = [true]): Promise<World> {
@@ -53,7 +54,8 @@ async function world(flips: boolean[] = [true]): Promise<World> {
   const human = `0x${"ab".repeat(32)}` as Hex;
   await store.saveSession({ humanId: human, sessionId: `session_${"c".repeat(128)}`, account: user.address, credentialLevel: 3, enrollNullifier: "1", sybilScore: null });
   const chainState = { stage: 0, banned: false, enrolled: true, validator: false, contexts: new Map<bigint, Hex>() };
-  const calls: World["calls"] = { penalize: [], lift: [], grant: [] };
+  const calls: World["calls"] = { penalize: [], lift: [], grant: [], award: [], slash: [] };
+  const cooldown = { on: false };
   let nextReceipt = 0n;
   const reads: ChainReads = {
     humanOf: async (a: Address) => (chainState.enrolled && a === user.address ? human : zeroHash),
@@ -83,6 +85,15 @@ async function world(flips: boolean[] = [true]): Promise<World> {
         return `0x${"22".repeat(32)}` as Hash;
       },
       grant: undefined as never,
+      award: async (_h, sampleId) => {
+        if (cooldown.on) return { awarded: false, reason: "No token this time: one per 30 s (difficulty)." };
+        calls.award.push(sampleId);
+        return { awarded: true, txHash: `0x${"44".repeat(32)}` as Hash };
+      },
+      slash: async (h) => {
+        calls.slash.push(h);
+        return `0x${"55".repeat(32)}` as Hash;
+      },
       grantValidator: async (h) => {
         calls.grant.push(h);
         chainState.validator = true;
@@ -106,7 +117,11 @@ async function world(flips: boolean[] = [true]): Promise<World> {
       mode: "simulated",
     },
   };
-  return { deps, store, user, human, chainState, calls };
+  return { deps, store, user, human, chainState, calls, cooldown };
+}
+
+async function report(w: World, proposalId: string, signer = w.user) {
+  return reject(w.deps, { proposalId, signature: await signer.signMessage({ message: reportMessage(proposalId) }) });
 }
 
 async function approveAnswer(w: World, proposalId: string) {
@@ -152,15 +167,28 @@ describe("demo flow", () => {
       for (const secret of ["wrong", "right", "typo.js", "correct.js", "verdict", "salt", "variant"]) expect(json).not.toContain(secret);
     });
 
-    it("reject = a new answer in the next round, nothing on-chain", async () => {
+    it("report (signed by the reviewer) = +1 token and a new answer in the next round; never a slash", async () => {
       const a1 = await ask(w.deps, { account: w.user.address });
-      const a2 = await reject(w.deps, { proposalId: a1.id });
+      const a2 = await report(w, a1.id);
       expect(a2.round).toBe(2);
       expect(a2.id).not.toBe(a1.id);
-      const a3 = await reject(w.deps, { proposalId: a2.id });
+      expect(a2.token).toMatchObject({ awarded: true, note: "+1 reward token" });
+      w.cooldown.on = true; // too fast: no token, still a new round
+      const a3 = await report(w, a2.id);
       expect(a3.round).toBe(3);
+      expect(a3.token).toMatchObject({ awarded: false });
+      expect(w.calls.award).toHaveLength(1);
+      expect(w.calls.slash).toHaveLength(0);
       expect(w.calls.penalize).toHaveLength(0);
-      expect(await codeOf(reject(w.deps, { proposalId: a1.id }))).toBe("stale"); // rejected once
+      expect(await codeOf(report(w, a1.id))).toBe("stale"); // reported once
+    });
+
+    it("only the reviewer's own wallet can report a sample", async () => {
+      const a = await ask(w.deps, { account: w.user.address });
+      const other = privateKeyToAccount(generatePrivateKey());
+      expect(await codeOf(report(w, a.id, other))).toBe("rejected");
+      expect(await codeOf(reject(w.deps, { proposalId: a.id, signature: "0x12" }))).toBe("invalid_request");
+      expect(w.calls.award).toHaveLength(0);
     });
 
     it("refuses ask and approve when not enrolled, restricted or banned (fail closed)", async () => {
@@ -176,61 +204,34 @@ describe("demo flow", () => {
   });
 
   describe("approve and judge", () => {
-    it("approved correct code: sealed fingerprint matches, Good decision, no token; judged once", async () => {
+    it("approved correct code: fingerprint matches, Good decision, +1 token, no slash; judged once", async () => {
       w = await world([true]);
       const a = await ask(w.deps, { account: w.user.address });
       const r = await approveAnswer(w, a.id);
       const j = await judge(w.deps, { receiptId: r.receiptId });
-      expect(j).toMatchObject({ verdict: "right", fingerprintMatches: true, tokenId: null, alreadyJudged: false });
+      expect(j).toMatchObject({ verdict: "right", fingerprintMatches: true, alreadyJudged: false, slash: null });
+      expect(j.token).toMatchObject({ awarded: true });
       expect(w.chainState.contexts.get(BigInt(r.receiptId))).toBe(j.commitment); // contextHash on-chain = hash(code, verdict, salt)
       expect(j.commitment).toBe(commitmentOf(a.code, "right", j.salt));
-      expect(w.calls.penalize).toHaveLength(0);
       expect((await judge(w.deps, { receiptId: r.receiptId })).alreadyJudged).toBe(true);
+      expect(w.calls.award).toHaveLength(1);
+      expect(w.calls.slash).toHaveLength(0);
+      expect(w.calls.penalize).toHaveLength(0); // no penalty NFT in this demo
     });
 
-    it("approved wrong code: the judge mints once, with the commitment as evidence", async () => {
+    it("approved code that fails: +1 token for reviewing, then every token slashed; once", async () => {
       w = await world([false]);
       const a = await ask(w.deps, { account: w.user.address });
       const r = await approveAnswer(w, a.id);
       const j = await judge(w.deps, { receiptId: r.receiptId });
-      expect(j).toMatchObject({ verdict: "wrong", fingerprintMatches: true, tokenId: "1" });
-      expect(w.calls.penalize).toEqual([[BigInt(r.receiptId), j.commitment]]);
-      const again = await judge(w.deps, { receiptId: r.receiptId });
-      expect(again).toMatchObject({ alreadyJudged: true, tokenId: "1" });
-      expect(w.calls.penalize).toHaveLength(1); // once per receipt
-
+      expect(j).toMatchObject({ verdict: "wrong", fingerprintMatches: true });
+      expect(j.slash).toMatchObject({ note: "Wrong approval: all reward tokens slashed" });
+      expect(w.calls.slash).toEqual([w.human]);
+      expect(w.calls.penalize).toHaveLength(0);
+      expect((await judge(w.deps, { receiptId: r.receiptId })).alreadyJudged).toBe(true);
+      expect(w.calls.slash).toHaveLength(1);
       const st = await standing(w.deps, w.user.address);
-      expect(st.receipts[0]).toMatchObject({ receiptId: r.receiptId, judged: { verdict: "wrong", tokenId: "1" } });
-    });
-
-    it("reward points: a right approval earns +1 (or reports the cooldown); a wrong one slashes all points", async () => {
-      w = await world([true, true, false]);
-      const awarded: bigint[] = [];
-      const slashed: Hex[] = [];
-      let cooldown = false;
-      w.deps.writes.award = async (_h, id) => {
-        if (cooldown) return { awarded: false, reason: "No point this time: one point per cooldown (difficulty)." };
-        awarded.push(id);
-        return { awarded: true, txHash: `0x${"44".repeat(32)}` as Hash };
-      };
-      w.deps.writes.slash = async (h) => {
-        slashed.push(h);
-        return `0x${"55".repeat(32)}` as Hash;
-      };
-
-      const r1 = await approveAnswer(w, (await ask(w.deps, { account: w.user.address })).id);
-      expect((await judge(w.deps, { receiptId: r1.receiptId })).reward).toMatchObject({ awarded: true, note: "+1 reward point" });
-
-      cooldown = true;
-      const r2 = await approveAnswer(w, (await ask(w.deps, { account: w.user.address })).id);
-      expect((await judge(w.deps, { receiptId: r2.receiptId })).reward).toMatchObject({ awarded: false });
-      expect(awarded).toEqual([BigInt(r1.receiptId)]);
-
-      const r3 = await approveAnswer(w, (await ask(w.deps, { account: w.user.address })).id);
-      const j3 = await judge(w.deps, { receiptId: r3.receiptId });
-      expect(j3.tokenId).toBe("1");
-      expect(j3.reward).toMatchObject({ note: "All reward points slashed" });
-      expect(slashed).toEqual([w.human]);
+      expect(st.receipts[0]).toMatchObject({ receiptId: r.receiptId, judged: { verdict: "wrong" } });
     });
 
     it("refuses to judge when the on-chain fingerprint doesn't match", async () => {
@@ -242,17 +243,17 @@ describe("demo flow", () => {
       expect(w.calls.penalize).toHaveLength(0);
     });
 
-    it("a failed mint releases the judgment so the judge can run again", async () => {
+    it("a failed slash releases the judgment so the judge can run again", async () => {
       w = await world([false]);
       const a = await ask(w.deps, { account: w.user.address });
       const r = await approveAnswer(w, a.id);
-      const ok = w.deps.writes.penalize;
-      w.deps.writes.penalize = async () => {
+      const ok = w.deps.writes.slash;
+      w.deps.writes.slash = async () => {
         throw new Error("rpc down");
       };
       expect(await codeOf(judge(w.deps, { receiptId: r.receiptId }))).toBe("verification_unavailable");
-      w.deps.writes.penalize = ok;
-      expect((await judge(w.deps, { receiptId: r.receiptId })).tokenId).toBe("1");
+      w.deps.writes.slash = ok;
+      expect((await judge(w.deps, { receiptId: r.receiptId })).slash).not.toBeNull();
     });
   });
 
