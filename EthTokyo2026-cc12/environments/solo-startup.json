@@ -1,0 +1,62 @@
+{
+  "name": "solo-startup",
+  "description": "Two or three people shipping fast. Self-approval allowed, no live proof (future work), lenient ladder. Still records who approved what.",
+  "policy": {
+    "liveProofTier": 4,
+    "allowSelfApproval": true,
+    "flagCooldownDays": 1,
+    "flagStrikeWindowDays": 30,
+    "baselessFlagLimit": 5,
+    "maxTierForSelfie": 2
+  },
+  "receipts": {
+    "liabilityWindowDays": 14,
+    "appealWindowDays": 0,
+    "attester": null
+  },
+  "penalties": {
+    "base": 100,
+    "majorMultiplier": 2,
+    "escalationPct": 50,
+    "maxScore": 1000,
+    "stage2At": 250,
+    "stage3At": 600,
+    "fadeDays": 14
+  },
+  "repos": [
+    {
+      "id": "startup/app",
+      "tier": 1,
+      "requiredApprovals": 1
+    },
+    {
+      "id": "startup/infra",
+      "tier": 3,
+      "requiredApprovals": 1
+    }
+  ],
+  "presets": {
+    "founder": {
+      "durationDays": 365,
+      "grants": {
+        "AI_SUBMIT": 200,
+        "REPO_TIER": 3,
+        "APPROVE_DEPTH": 5000,
+        "SOLO_APPROVE": 1,
+        "MERGE_PROTECTED": 1,
+        "GRANT": 1,
+        "FLAG": 1
+      }
+    },
+    "contractor": {
+      "durationDays": 30,
+      "grants": {
+        "AI_SUBMIT": 50,
+        "REPO_TIER": 1,
+        "APPROVE_DEPTH": 300,
+        "FLAG": 1
+      }
+    }
+  },
+  "fees": null
+}

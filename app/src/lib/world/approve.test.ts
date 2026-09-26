@@ -409,7 +409,7 @@ describe("accept → receipt", () => {
     const body = await acceptBody(v, prep);
     expect(await codeOf(completeApproval(h.deps, { ...body, signature: "0x12" }))).toBe("invalid_request");
     expect(await codeOf(completeApproval(h.deps, { ...body, extra: true }))).toBe("invalid_request");
-    expect(await codeOf(completeApproval(h.deps, { ...body, result: { protocol_version: "3.0" } }))).toBe("invalid_request");
+    expect(await codeOf(completeApproval(h.deps, { ...body, result: { protocol_version: "3.0" } }))).toBe("unavailable_credential");
     expect(await codeOf(prepareApproval(h.deps, { proposalId: "f".repeat(64) }))).toBe("invalid_request");
   });
 

@@ -7,90 +7,75 @@ import { WorldError, fromWorldCode } from "@/lib/world/errors";
  * Server-side verification of IDKit results with World's Developer Portal.
  * https://docs.world.org/api-reference/developer-portal/verify
  *
- * Fail closed: the client payload and World's answer are both parsed strictly. A missing field,
- * an unknown field, a wrong type, or a value that doesn't match what we asked for is an error,
- * never a pass.
+ * World is the judge of the proof: the client's result is forwarded to World unchanged, whatever
+ * extra fields World App adds. Our schemas only require the fields WE depend on (protocol version,
+ * action, environment, signal, nullifier / session_id, credential) and fail closed if any of those
+ * is missing, malformed, or not what we asked for.
+ *
+ * One protocol version per action: World ID 4.0 only. A legacy 3.0 proof of the same person has a
+ * different nullifier for the same action, so accepting both would allow two accounts per human;
+ * and sessions exist only in 4.0 (docs/DECISIONS.md, "One protocol version").
  */
 
 export const VERIFY_URL = "https://developer.world.org/api/v4/verify";
 export const WORLD_ENVIRONMENTS = ["production", "staging"] as const;
 export type WorldEnvironment = (typeof WORLD_ENVIRONMENTS)[number];
+export const PROTOCOL_VERSION = "4.0";
 
 /** issuer_schema_id → HumanRegistry credential level (1 = ORB / Proof of Human, 2 = SELFIE). */
 export const LEVEL_BY_SCHEMA: Record<number, 1 | 2> = { 1: 1, 11: 2 };
 
 const hex = z.string().regex(/^0x[0-9a-fA-F]+$/);
-const proof = z.array(hex).length(5);
-const integrityBundle = z.looseObject({}); // opaque to us; World checks it
 
 // ------------------------------------------------------------------ client payloads (IDKit results)
-const uniquenessItem = z.strictObject({
-  identifier: z.string().min(1),
+// looseObject: unknown fields pass through untouched and are forwarded to World as-is.
+const uniquenessItem = z.looseObject({
   signal_hash: hex,
-  proof,
   nullifier: hex,
   issuer_schema_id: z.number().int(),
-  expires_at_min: z.number().int(),
   sybil_score: z.number().optional(),
 });
 
-/** World ID 4.0 uniqueness proof (legacy 3.0 proofs are not accepted). */
-export const uniquenessResult = z.strictObject({
-  protocol_version: z.literal("4.0"),
-  nonce: hex,
+/** World ID 4.0 uniqueness proof: only the fields we rely on are required. */
+export const uniquenessResult = z.looseObject({
+  protocol_version: z.literal(PROTOCOL_VERSION),
   action: z.string().min(1),
-  action_description: z.string().optional(),
-  responses: z.array(uniquenessItem).length(1),
-  user_presence_completed: z.boolean().optional(),
   environment: z.enum(WORLD_ENVIRONMENTS),
-  identity_attested: z.boolean().optional(),
-  integrity_bundle: integrityBundle.optional(),
+  responses: z.array(uniquenessItem).length(1),
 });
 export type UniquenessResult = z.infer<typeof uniquenessResult>;
 
-const sessionItem = z.strictObject({
-  identifier: z.string().min(1),
+const sessionItem = z.looseObject({
   signal_hash: hex,
-  proof,
-  session_nullifier: z.tuple([hex, hex]),
+  session_nullifier: z.array(hex).min(1),
   issuer_schema_id: z.number().int(),
-  expires_at_min: z.number().int(),
   sybil_score: z.number().optional(),
 });
 
 export const SESSION_ID = /^session_[0-9a-f]{128}$/;
 
-/** World ID 4.0 session proof (createSession / proveSession). */
-export const sessionResult = z.strictObject({
-  protocol_version: z.literal("4.0"),
-  nonce: hex,
-  action_description: z.string().optional(),
+/** World ID 4.0 session proof (createSession / proveSession): only the fields we rely on are required. */
+export const sessionResult = z.looseObject({
+  protocol_version: z.literal(PROTOCOL_VERSION),
   session_id: z.string().regex(SESSION_ID),
-  responses: z.array(sessionItem).length(1),
-  user_presence_completed: z.boolean().optional(),
   environment: z.enum(WORLD_ENVIRONMENTS),
-  integrity_bundle: integrityBundle.optional(),
+  responses: z.array(sessionItem).length(1),
 });
 export type SessionResult = z.infer<typeof sessionResult>;
 
 // ------------------------------------------------------------------ World's answer
-const verifyResultItem = z.strictObject({
-  identifier: z.string(),
+const verifyResultItem = z.looseObject({
   success: z.boolean(),
-  nullifier: z.string().optional(),
   code: z.string().optional(),
-  detail: z.string().optional(),
 });
 
-const verifySuccess = z.strictObject({
+const verifySuccess = z.looseObject({
   success: z.literal(true),
   action: z.string().optional(),
   nullifier: z.string().optional(),
-  created_at: z.string().optional(),
   environment: z.enum(["production", "staging", "sandbox"]),
   session_id: z.string().optional(),
   results: z.array(verifyResultItem).min(1),
-  message: z.string().optional(),
 });
 
 const verifyFailure = z.looseObject({
@@ -107,23 +92,37 @@ export type VerifyOptions = {
 };
 
 export function parseClientResult<T extends z.ZodType>(schema: T, input: unknown): z.infer<T> {
+  const version = (input as { protocol_version?: unknown } | null)?.protocol_version;
+  if (version !== undefined && version !== PROTOCOL_VERSION) {
+    throw new WorldError(
+      "unavailable_credential",
+      version === "3.0"
+        ? "World App sent a legacy World ID 3.0 proof. This app accepts World ID 4.0 only: update World App and try again."
+        : "This World ID protocol version is not accepted.",
+      `protocol_version ${String(version)} (only ${PROTOCOL_VERSION} accepted)`,
+    );
+  }
   const parsed = schema.safeParse(input);
   if (!parsed.success) {
-    const fields = [...new Set(parsed.error.issues.map((i) => (i.code === "unrecognized_keys" ? `extra ${i.keys.join(",")}` : i.path.join(".") || i.code)))];
+    const fields = [...new Set(parsed.error.issues.map((i) => i.path.join(".") || i.code))];
     throw new WorldError("invalid_request", "The World ID result is malformed or not a World ID 4.0 proof.", `result fields: ${fields.join(", ")}`);
   }
   return parsed.data;
 }
 
-async function callVerify(payload: object, opts: VerifyOptions) {
+async function callVerify(payload: { environment: string }, opts: VerifyOptions) {
+  // The client can't pick "staging"/"sandbox" (they accept test proofs): refuse, don't rewrite,
+  // so what World checks is exactly what World App produced.
+  if (payload.environment !== opts.environment) {
+    throw new WorldError("rejected", "The proof is from the wrong World ID environment.", `environment ${payload.environment}`);
+  }
   const doFetch = opts.fetch ?? fetch;
   let res: Response;
   try {
     res = await doFetch(`${VERIFY_URL}/${encodeURIComponent(opts.rpId)}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      // Pin the environment: the client can't pick "staging"/"sandbox", which accept test proofs.
-      body: JSON.stringify({ ...payload, environment: opts.environment }),
+      body: JSON.stringify(payload), // unchanged: World is the judge of the proof
       signal: AbortSignal.timeout(opts.timeoutMs ?? 10_000),
     });
   } catch {
@@ -151,7 +150,7 @@ async function callVerify(payload: object, opts: VerifyOptions) {
   const ok = verifySuccess.safeParse(body);
   if (!ok.success) {
     // Field names only (never values), so a dev page can show what didn't match.
-    const fields = [...new Set(ok.error.issues.map((i) => i.path.join(".") || (i.code === "unrecognized_keys" ? i.keys.join(",") : i.code)))];
+    const fields = [...new Set(ok.error.issues.map((i) => i.path.join(".") || i.code))];
     throw new WorldError("verification_unavailable", "World ID verification answered with unexpected fields.", `unexpected fields: ${fields.join(", ")}`);
   }
   const v = ok.data;

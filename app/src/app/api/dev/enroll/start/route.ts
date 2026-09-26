@@ -1,4 +1,4 @@
-import { devEnrollDeps, isDev, runDev } from "@/lib/dev/enroll";
+import { devEnrollDeps, isDev, runDev, shapeOf } from "@/lib/dev/enroll";
 import { serverEnv } from "@/lib/server/env";
 import { getStore } from "@/lib/server/store";
 
@@ -20,5 +20,6 @@ export async function POST(request: Request): Promise<Response> {
     attesterKey: env.ATTESTER_PRIVATE_KEY,
   });
   const result = await runDev("start", deps, body);
+  if (!result.ok) console.warn("[dev/enroll] start failed", JSON.stringify({ ...result, shape: shapeOf(body) }));
   return Response.json(result, { status: result.ok ? 200 : 422, headers: { "cache-control": "no-store" } });
 }

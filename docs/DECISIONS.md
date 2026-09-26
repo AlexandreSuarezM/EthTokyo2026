@@ -130,6 +130,25 @@ validator is identified by their EIP-712 signature. This replaces "relayer submi
 - `WORLD_ENVIRONMENT` (default `production`) is the only environment the server accepts; `staging` is for the
   simulator only.
 
+## One protocol version per action: World ID 4.0 only (smoke test, 2026-09-26)
+
+- **Found:** in the first real test, World App answered our `proofOfHuman()` request with a **legacy 3.0** proof
+  (`protocol_version: "3.0"`, `identifier: "orb"`, `merkle_root`), although we set `allow_legacy_proofs: false`.
+  The SDK documents that preset as "a World ID 4.0 proof-of-human credential with legacy Orb fallback".
+- **Why one version:** a 3.0 and a 4.0 proof from the same person give **different nullifiers** for the same
+  action. The IDKit SDK says about `allow_legacy_proofs: true`: "You must track both v3 and v4 nullifiers to
+  prevent double-claims." Accepting both would let one person enroll twice (two `humanId`s).
+- **Why 4.0:** sessions exist only in 4.0 ("Sessions are always World ID v4 - there is no legacy (v3) session
+  support", IDKit SDK), and enrollment and every approval use sessions. A 3.0-only user could never finish
+  enrollment anyway, and picking 3.0 now would force everyone to re-enroll with a new `humanId` when 3.0 is retired.
+- **Enforced:** the client requests 4.0 only (`constraints: CredentialRequest("proof_of_human")`, no legacy
+  fallback); the server refuses any other `protocol_version` with `unavailable_credential` ("World App sent a
+  legacy World ID 3.0 proof ... update World App").
+- **Parsing:** the server requires only the fields it depends on (protocol version, action, environment,
+  signal, nullifier / session_id, credential) and fails closed if they're missing. Every other field World
+  App adds is kept and the result is forwarded to World's verify API **unchanged**; World judges the proof.
+  A result from another environment is refused, not rewritten.
+
 ## Approval and receipt (CC-10)
 
 - **Deny with new input** closes the proposal (`POST /api/proposals/deny`). No receipt, nothing on-chain. The next
