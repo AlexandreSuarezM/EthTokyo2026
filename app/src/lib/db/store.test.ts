@@ -55,16 +55,50 @@ describe.each(drivers)("store (%s)", (_name, makeDriver) => {
     expect(await store.recordNullifier("a", `0x${"f".repeat(64)}`)).toBe(false);
   });
 
-  it("keeps one session per human and one human per session", async () => {
-    expect(await store.saveSession({ humanId: human, sessionId: "session_1", account, credentialLevel: 1 })).toBe(true);
-    expect(await store.saveSession({ humanId: human, sessionId: "session_2", account, credentialLevel: 1 })).toBe(false);
-    expect(await store.saveSession({ humanId: other, sessionId: "session_1", account, credentialLevel: 2 })).toBe(false);
+  it("keeps one session per human, per session_id and per enrollment nullifier", async () => {
+    const base = { account, credentialLevel: 1 as const, sybilScore: null };
+    expect(await store.saveSession({ ...base, humanId: human, sessionId: "session_1", enrollNullifier: "1" })).toBe(true);
+    // same human, same session, same nullifier: each alone is enough to refuse
+    expect(await store.saveSession({ ...base, humanId: human, sessionId: "session_2", enrollNullifier: "2" })).toBe(false);
+    expect(await store.saveSession({ ...base, humanId: other, sessionId: "session_1", enrollNullifier: "3" })).toBe(false);
+    expect(await store.saveSession({ ...base, humanId: other, sessionId: "session_3", enrollNullifier: "0x1" })).toBe(false);
 
     const byHuman = await store.sessionOfHuman(human);
-    expect(byHuman).toMatchObject({ humanId: human, sessionId: "session_1", account: account.toLowerCase(), credentialLevel: 1 });
+    expect(byHuman).toMatchObject({
+      humanId: human,
+      sessionId: "session_1",
+      account: account.toLowerCase(),
+      credentialLevel: 1,
+      enrollNullifier: "1",
+      sybilScore: null,
+    });
     expect((await store.humanOfSession("session_1"))?.humanId).toBe(human);
     expect(await store.humanOfSession("session_2")).toBeNull();
     expect(await store.sessionOfHuman(other)).toBeNull();
+  });
+
+  it("stores the Selfie Check sybil score", async () => {
+    await store.saveSession({ humanId: other, sessionId: "s", account, credentialLevel: 2, enrollNullifier: "9", sybilScore: 1.5 });
+    expect((await store.sessionOfHuman(other))?.sybilScore).toBe(1.5);
+  });
+
+  it("hands a pending enrollment to exactly one taker", async () => {
+    const pending = {
+      id: "a".repeat(64),
+      humanId: human,
+      enrollNullifier: "0x10",
+      account,
+      credentialLevel: 2 as const,
+      sybilScore: -0.5,
+      expiresAt: 2_000_000_000,
+    };
+    expect(await store.savePending(pending)).toBe(true);
+    expect(await store.savePending(pending)).toBe(false);
+    expect(await store.getPending(pending.id)).toMatchObject({ enrollNullifier: "16", sybilScore: -0.5 });
+
+    const taken = await Promise.all(Array.from({ length: 10 }, () => store.takePending(pending.id)));
+    expect(taken.filter(Boolean)).toHaveLength(1);
+    expect(await store.getPending(pending.id)).toBeNull();
   });
 
   it("consumes an approval exactly once", async () => {

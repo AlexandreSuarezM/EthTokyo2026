@@ -108,6 +108,28 @@ enroll `msg.sender`, so the **human's own wallet** sends them, with the attester
 The relayer can't (it would enroll itself). The relayer only submits `ValidationReceipts.validate`, where the
 validator is identified by their EIP-712 signature. This replaces "relayer submits" in BUILD_PLAN CC-9.
 
+## Enrollment (CC-9)
+
+- **Two proofs, both verified on the server** (sessions are not uniqueness proofs,
+  [Session proofs](https://docs.world.org/world-id/idkit/session-proofs)):
+  1. `POST /api/enroll/start`: uniqueness proof, action `hitl-enroll`, signal `hitl-enroll:<wallet>`.
+     Its nullifier gives `humanId = keccak256(abi.encode("hitl.human.v1", nullifier))`: one per person.
+  2. `POST /api/enroll/complete`: `createSession` proof, signal `hitl-session:<enrollmentId>`, same credential.
+     Its `session_id` is **the account id** (never the `session_nullifier`, which is only replay protection).
+     Stored once per human, per `session_id` and per enrollment nullifier; then the attester signs
+     `enrollAttested` and the human's wallet sends it.
+- **HumanRegistry check:** the attester's signature binds `msg.sender` (in the signed struct), the chain and the
+  contract (EIP-712 domain) and a deadline; used digests are recorded. Tests:
+  `test_AttestedEnrollIsBoundToSender`, `test_AttestedEnrollIsBoundToChain`, `test_AttestedEnrollExpiredReverts`,
+  `test_AttestedEnrollReplayReverts`, plus an app test where another wallet's copy of the attestation reverts.
+- **Resume:** if the wallet never sent the transaction, a new uniqueness proof from the same wallet re-issues the
+  attestation for the stored session. Another wallet is refused (`already_enrolled`).
+- **Known limit:** the two proofs can't be linked cryptographically. Two people colluding (one does the uniqueness
+  proof, the other the session) could split identity and approvals. The session is bound to the pending enrollment
+  by its signal and must use the same credential, so this needs both people to cooperate on purpose.
+- `WORLD_ENVIRONMENT` (default `production`) is the only environment the server accepts; `staging` is for the
+  simulator only.
+
 ## Agent and model
 
 See Q1, Q4 and Q8.

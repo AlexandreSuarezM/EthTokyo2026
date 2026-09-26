@@ -4,6 +4,7 @@ import { z } from "zod";
 export const SERVER_ENV_VARS = [
   "WORLD_RP_ID",
   "WORLD_SIGNING_KEY",
+  "WORLD_ENVIRONMENT",
   "ATTESTER_PRIVATE_KEY",
   "RELAYER_PRIVATE_KEY",
   "SEPOLIA_RPC_URL",
@@ -44,6 +45,8 @@ const serverSchema = z
   .object({
     WORLD_RP_ID: z.string().regex(/^rp_\S+$/, "must look like rp_..."),
     WORLD_SIGNING_KEY: z.string().regex(hex32, "must be a 32-byte hex key"),
+    // "staging" only for the World simulator; a deployment accepts exactly one environment.
+    WORLD_ENVIRONMENT: z.enum(["production", "staging"]),
     ATTESTER_PRIVATE_KEY: privateKey,
     RELAYER_PRIVATE_KEY: privateKey,
     SEPOLIA_RPC_URL: z.url({ protocol: /^https?$/ }),
@@ -74,6 +77,7 @@ export function parseServerEnv(env: Record<string, string | undefined>): ServerE
   const input = {
     ...Object.fromEntries(SERVER_ENV_VARS.map((name) => [name, env[name] || undefined])),
     CHAIN_ID: env.CHAIN_ID || String(SEPOLIA_CHAIN_ID),
+    WORLD_ENVIRONMENT: env.WORLD_ENVIRONMENT || "production",
     DATABASE_URL: env.DATABASE_URL || (production ? undefined : LOCAL_DATABASE_URL),
   };
 
