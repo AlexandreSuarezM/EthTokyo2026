@@ -11,6 +11,7 @@ export const SERVER_ENV_VARS = [
   "CHAIN_ID",
   "GITHUB_TOKEN",
   "DATABASE_URL",
+  "REPOS_ROOT",
 ] as const;
 
 export const PUBLIC_ENV_VARS = ["NEXT_PUBLIC_WORLD_APP_ID"] as const;
@@ -55,6 +56,8 @@ const serverSchema = z
     DATABASE_URL: z
       .string()
       .regex(/^(file:|postgres(ql)?:\/\/)/, "must start with file: or postgres://"),
+    // Local checkouts the server reads commits from: <REPOS_ROOT>/<owner>/<name>. Unset = approvals off.
+    REPOS_ROOT: z.string().min(1).optional(),
   })
   .refine((e) => e.ATTESTER_PRIVATE_KEY.toLowerCase() !== e.RELAYER_PRIVATE_KEY.toLowerCase(), {
     path: ["RELAYER_PRIVATE_KEY"],

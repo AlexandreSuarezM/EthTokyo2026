@@ -130,6 +130,33 @@ validator is identified by their EIP-712 signature. This replaces "relayer submi
 - `WORLD_ENVIRONMENT` (default `production`) is the only environment the server accepts; `staging` is for the
   simulator only.
 
+## Approval and receipt (CC-10)
+
+- **Deny with new input** closes the proposal (`POST /api/proposals/deny`). No receipt, nothing on-chain. The next
+  round is a new proposal (`reviseProposal`) whose context is rebuilt from the base task plus every deny input so
+  far. One revision per denied proposal (unique `parent_id`).
+- **Commit hash from the repository, never from the client or the LLM.** The server reads base..head from a local
+  checkout (`REPOS_ROOT/<owner>/<name>`, `git rev-parse` / `git diff`): commit sha, diff, line count. On-chain
+  `commitHash` = the git sha left-padded to 32 bytes (SHA-256 repos: the sha itself); `repoId` =
+  `keccak256(bytes(name))` like `Deploy.s.sol`. `contextHash` = keccak256 of what the validator was shown (task,
+  deny inputs, round, shas, diff). The change is re-read at accept; if the branch moved, it's `stale`.
+- **Accept = two calls.** `POST /api/approve/prepare` builds the `HumanApproval` on the server and returns it for
+  the validator's wallet to sign, plus the World ID signal `hitl-approve:<approvalDigest>`.
+  `POST /api/approve/complete` takes the wallet signature and a `proveSession` result made at that moment: the
+  proof's signal must match the approval, the verified `session_id` must map to an enrolled `humanId`, the wallet
+  that signed must be that human's account on-chain, and the credential must match the enrollment.
+  Session requests have no action (see Q1), so the World proof is bound to the approval by its **signal**, not by
+  the action string `merge:${repoId}:${commitHash}` from BUILD_PLAN.
+- **Single use, in the database:** the pending approval (taken once), the proof's session nullifier (action
+  `hitl-approve`), and one approval key per `(repoId, commitHash, humanId)`. A second validator can approve the
+  same commit (tier-2 repos need two). The key is released only when the relayer's simulation refused the call
+  (no transaction was sent); if a transaction may have been sent, it stays consumed.
+- The attester signs `HumanAttestation(approvalDigest, proofRef, presence = false)`; `proofRef` = keccak256 of the
+  verified World ID result, which is kept in the `receipts` table for audit. The relayer simulates `validate()`
+  first, so banned / no permission / Selfie above its cap / not enrolled is a typed error and no transaction.
+- **World environment:** one config value, `WORLD_ENVIRONMENT` (default `production`), used by enrollment and
+  approval alike. Staging is currently refused by World for our app (see `docs/DEBRIEF.md`).
+
 ## Agent and model
 
 See Q1, Q4 and Q8.

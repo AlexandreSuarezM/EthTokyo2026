@@ -1,6 +1,6 @@
 /**
- * Typed World ID errors shared by the enrollment (and later approval) flows.
- * Every error means: nothing was stored, nothing was signed, no transaction.
+ * Typed World ID errors shared by the enrollment and approval flows.
+ * Every error means: nothing was signed and no transaction was sent.
  */
 export const WORLD_ERROR_CODES = [
   "cancelled", //              the user closed or declined the request in World App
@@ -10,6 +10,10 @@ export const WORLD_ERROR_CODES = [
   "unavailable_credential", // the user lacks the credential (e.g. no Orb), or it's not one we accept
   "invalid_request", //        malformed input from the client
   "verification_unavailable", // World's verify API is down or answered something we can't trust
+  "not_enrolled", //           the proof or wallet doesn't map to an enrolled human
+  "replayed", //               this proof, approval or change was already used
+  "ineligible", //             enrolled, but not allowed (banned, no permission, Selfie on a high tier, ...)
+  "stale", //                  the change moved since it was shown to the validator
 ] as const;
 
 export type WorldErrorCode = (typeof WORLD_ERROR_CODES)[number];
@@ -22,6 +26,10 @@ const HTTP_STATUS: Record<WorldErrorCode, number> = {
   unavailable_credential: 422,
   invalid_request: 400,
   verification_unavailable: 503,
+  not_enrolled: 403,
+  replayed: 409,
+  ineligible: 403,
+  stale: 409,
 };
 
 export class WorldError extends Error {
