@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { demoPublicConfig } from "@/lib/server/demo";
 import DemoApp from "./DemoApp";
+import "./demo.css";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "HITL: human accountability for AI code" };
