@@ -38,6 +38,8 @@ export class WorldError extends Error {
     readonly code: WorldErrorCode,
     /** Safe to show the user: never contains proofs, keys or raw upstream bodies. */
     message: string,
+    /** World's own error code (verify API or IDKit), when World refused. Shown only on dev pages. */
+    readonly worldCode?: string,
   ) {
     super(message);
     this.name = "WorldError";

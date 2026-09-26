@@ -131,3 +131,33 @@ describe("fromWorldCode", () => {
     expect(fromWorldCode(undefined)).toBe("rejected");
   });
 });
+
+describe("World's own error code (for dev pages)", () => {
+  const errOf = async (p: Promise<unknown>) => (await p.then(() => undefined, (e: unknown) => e)) as WorldError;
+
+  it("carries World's code and HTTP status, never proof values", async () => {
+    const r = uniquenessResult({ account });
+    const refused = mockFetch({ status: 403, body: { code: "environment_not_allowed", detail: "..." } });
+    expect((await errOf(verifyUniqueness(r, ENROLL_ACTION, opts(refused.fetch)))).worldCode).toBe("HTTP 403 environment_not_allowed");
+
+    const failed = mockFetch({ status: 400, body: { code: "all_verifications_failed", results: [{ code: "verification_failed" }] } });
+    expect((await errOf(verifyUniqueness(r, ENROLL_ACTION, opts(failed.fetch)))).worldCode).toBe("HTTP 400 verification_failed");
+  });
+
+  it("names unexpected fields in World's answer and in the client result", async () => {
+    const r = uniquenessResult({ account });
+    const extra = mockFetch({ body: { ...worldOk(r), surprise: 1 } });
+    const e = await errOf(verifyUniqueness(r, ENROLL_ACTION, opts(extra.fetch)));
+    expect(e.worldCode).toBe("unexpected fields: surprise");
+    expect(e.worldCode).not.toContain(r.responses[0].nullifier);
+
+    const client = (() => {
+      try {
+        parseClientResult(uniquenessSchema, { ...r, surprise: 1 });
+      } catch (err) {
+        return err as WorldError;
+      }
+    })();
+    expect(client?.worldCode).toBe("result fields: extra surprise");
+  });
+});
