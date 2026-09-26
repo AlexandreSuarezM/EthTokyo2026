@@ -28,7 +28,9 @@ Our own cut-off: **submit before Saturday 24:00 (Sunday 00:00) Madrid**, leaving
 ## DEMO_PLAN progress (see docs/DEMO_PLAN.md)
 
 - 13:35 Step 1 (contracts): count-based ladder + judge lift + `fadeSeconds`, demo preset; 100 forge + 137 app tests
-  green. Keys and Sepolia deploy: waiting for funding.
+  green. Keys rotated (old ones were exposed).
+- 14:25 Step 1 (deploy): demo preset on Sepolia, `config/11155111.json`; roles verified on-chain (oracle + judge =
+  relayer `0x99fa…8328`, minter = receipts, attester set, ladder 3/true, fade 300 s, appeal 0, liability 365 d).
 
 ## Order for the rest of Saturday (superseded by docs/DEMO_PLAN.md)
 
