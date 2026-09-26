@@ -1,6 +1,5 @@
-import { devEnrollDeps, isDev, runDev, shapeOf } from "@/lib/dev/enroll";
+import { devEnrollDeps, devStore, isDev, runDev, shapeOf } from "@/lib/dev/enroll";
 import { serverEnv } from "@/lib/server/env";
-import { getStore } from "@/lib/server/store";
 
 /** Dev only (404 in production): enrollment step "complete" against the real World verify API. */
 export async function POST(request: Request): Promise<Response> {
@@ -13,7 +12,7 @@ export async function POST(request: Request): Promise<Response> {
   }
   const env = serverEnv();
   const deps = devEnrollDeps({
-    store: await getStore(),
+    store: await devStore(),
     rpId: env.WORLD_RP_ID,
     environment: env.WORLD_ENVIRONMENT,
     chainId: env.CHAIN_ID,

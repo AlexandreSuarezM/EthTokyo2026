@@ -39,7 +39,7 @@ For whoever records the video and presents live. Everything runs on **Sepolia** 
 ```
 ┌ header: title · "World ID: simulated" badge · judge address ─────────────────────────┐
 │ 1. Sign in            │ 2. AI answer                          │ Your standing          │
-│ Connect MetaMask      │ [Ask the AI: write a hello world fn]  │ Active / Restricted /  │
+│ Connect MetaMask      │ [Spawn code sample]                │ Active / Restricted /  │
 │ Enroll with World ID  │ code card · round n                   │ Banned · countdown     │
 │ Enrolled ✓ SIMULATED  │ [✓ Approve] [✗ Reject]                │ Penalty tokens x/3     │
 │                       │ judge box: verdict, fingerprint ✓     │ Judge: lift restriction│
@@ -56,10 +56,10 @@ For whoever records the video and presents live. Everything runs on **Sepolia** 
 | Clip | Account | Click path | What must be visible | Say |
 |---|---|---|---|---|
 | **01-enroll** | A | Connect MetaMask → Enroll with World ID → confirm in MetaMask | "Enrolled ✓ · credential: SIMULATED", yellow badge | "One human, one account. World ID is simulated today: our only World ID has no 4.0 credential. The contract marks it as SIMULATED, never Orb." |
-| **02-reject** | A | Ask the AI → **✗ Reject** | round 1 → round 2, no MetaMask popup | "Reject just asks again. Nothing goes on-chain, nobody is punished." |
+| **02-reject** | A | Spawn code sample → **✗ Reject** (or **⏭ Skip** for a new sample) | round 1 → round 2, no MetaMask popup | "Reject just asks again. Nothing goes on-chain, nobody is punished." |
 | **03-approve** | A | on the **correct** answer → **✓ Approve** → sign | receipt #n in Receipts with Etherscan link | "Approve is a signature from my wallet. The relayer pays gas. A receipt, no token." |
 | **04-good** | A | (right after 03) | judge box: **Fingerprint matches ✓**, **Good decision ✓**, **★ +1 reward point** | "The verdict was sealed in the receipt before I clicked: hash(code, verdict, salt). The judge reveals it now; anyone can check." |
-| **05-points** | A | repeat Ask → (reject until correct) → Approve, wait for "next point" countdown between | ★ 5 / 5 → **Opt in to the prize** → MetaMask | "Points are soulbound and slow: one per cooldown, the challenge difficulty. At five you enter the prize." |
+| **05-points** | A | repeat Spawn code sample → (Skip until correct) → Approve, wait for "next point" countdown between | ★ 5 / 5 → **Opt in to the prize** → MetaMask | "Points are soulbound and slow: one per cooldown, the challenge difficulty. At five you enter the prize." |
 | **06-slash** (optional) | A | approve a **wrong** answer | token #1, "All reward points slashed", **in the prize ✓** stays | "A mistake costs all points, but not the prize seat already earned." |
 | **07-token1** | B | Enroll → approve a **wrong** answer | token 1/3, **Restricted 4:57** countdown, Ask/Approve grey | "Approving wrong code mints a soulbound penalty token. Restricted for five minutes." |
 | **08-lift** | B | type a reason → **Lift restriction** | status Active, token stays "restriction lifted" | "The judge can lift the restriction early, with a reason. The token stays: it's the record." |
