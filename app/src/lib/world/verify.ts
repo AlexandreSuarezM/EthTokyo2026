@@ -108,7 +108,10 @@ export type VerifyOptions = {
 
 export function parseClientResult<T extends z.ZodType>(schema: T, input: unknown): z.infer<T> {
   const parsed = schema.safeParse(input);
-  if (!parsed.success) throw new WorldError("invalid_request", "The World ID result is malformed or not a World ID 4.0 proof.");
+  if (!parsed.success) {
+    const fields = [...new Set(parsed.error.issues.map((i) => (i.code === "unrecognized_keys" ? `extra ${i.keys.join(",")}` : i.path.join(".") || i.code)))];
+    throw new WorldError("invalid_request", "The World ID result is malformed or not a World ID 4.0 proof.", `result fields: ${fields.join(", ")}`);
+  }
   return parsed.data;
 }
 
@@ -135,25 +138,28 @@ async function callVerify(payload: object, opts: VerifyOptions) {
   }
 
   if (!res.ok) {
+    const failure = verifyFailure.safeParse(body);
+    const code = failure.success ? (failure.data.results?.find((r) => r.code)?.code ?? failure.data.code) : undefined;
+    const worldCode = `HTTP ${res.status}${code ? ` ${code}` : ""}`;
     if (res.status === 400) {
-      const failure = verifyFailure.safeParse(body);
-      const code = failure.success ? (failure.data.results?.find((r) => r.code)?.code ?? failure.data.code) : undefined;
-      if (code === "app_not_migrated") throw new WorldError("verification_unavailable", "World ID app is misconfigured.");
-      throw new WorldError(fromWorldCode(code), "World ID did not accept this proof.");
+      if (code === "app_not_migrated") throw new WorldError("verification_unavailable", "World ID app is misconfigured.", worldCode);
+      throw new WorldError(fromWorldCode(code), "World ID did not accept this proof.", worldCode);
     }
-    throw new WorldError("verification_unavailable", "World ID verification is unavailable.");
+    throw new WorldError("verification_unavailable", "World ID verification is unavailable.", worldCode);
   }
 
   const ok = verifySuccess.safeParse(body);
   if (!ok.success) {
-    throw new WorldError("verification_unavailable", "World ID verification answered with unexpected fields.");
+    // Field names only (never values), so a dev page can show what didn't match.
+    const fields = [...new Set(ok.error.issues.map((i) => i.path.join(".") || (i.code === "unrecognized_keys" ? i.keys.join(",") : i.code)))];
+    throw new WorldError("verification_unavailable", "World ID verification answered with unexpected fields.", `unexpected fields: ${fields.join(", ")}`);
   }
   const v = ok.data;
   if (v.environment !== opts.environment) {
-    throw new WorldError("rejected", "The proof is from the wrong World ID environment.");
+    throw new WorldError("rejected", "The proof is from the wrong World ID environment.", `environment ${v.environment}`);
   }
   const failed = v.results.find((r) => !r.success);
-  if (failed) throw new WorldError(fromWorldCode(failed.code), "World ID did not accept this proof.");
+  if (failed) throw new WorldError(fromWorldCode(failed.code), "World ID did not accept this proof.", failed.code ?? "result failed");
   return v;
 }
 
