@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { simulatedMark } from "@/lib/env";
 import { serverEnv } from "@/lib/server/env";
 import { RP_REQUEST_KINDS, createRpContext } from "@/lib/world/rp";
 
@@ -21,5 +22,5 @@ export async function POST(request: Request): Promise<Response> {
 
   const env = serverEnv();
   const ctx = createRpContext(parsed.data.kind, { rpId: env.WORLD_RP_ID, signingKeyHex: env.WORLD_SIGNING_KEY });
-  return Response.json(ctx, { headers: noStore });
+  return Response.json({ ...ctx, ...simulatedMark() }, { headers: noStore });
 }

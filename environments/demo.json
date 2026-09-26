@@ -1,0 +1,48 @@
+{
+  "name": "demo",
+  "description": "Single-user demo. One validator approves or rejects the AI's code; the oracle (the server that generated the code, here the relayer address) penalizes a wrong approval immediately (no appeal window). Two mistakes reach stage 2 (100, then 100 + 100% = 300 >= 200); a third bans (>= 500). Fades fast (100 points per day) so recovery is visible; the liability window is long (365 days).",
+  "policy": {
+    "liveProofTier": 4,
+    "allowSelfApproval": true,
+    "flagCooldownDays": 1,
+    "flagStrikeWindowDays": 30,
+    "baselessFlagLimit": 3,
+    "maxTierForSelfie": 1
+  },
+  "receipts": {
+    "liabilityWindowDays": 365,
+    "appealWindowDays": 0,
+    "attester": null,
+    "oracle": "operator"
+  },
+  "penalties": {
+    "base": 100,
+    "majorMultiplier": 2,
+    "escalationPct": 100,
+    "maxScore": 1000,
+    "stage2At": 200,
+    "stage3At": 500,
+    "fadeDays": 1
+  },
+  "repos": [
+    {
+      "id": "demo/app",
+      "tier": 1,
+      "requiredApprovals": 1
+    }
+  ],
+  "presets": {
+    "validator": {
+      "durationDays": 365,
+      "grants": {
+        "AI_SUBMIT": 100,
+        "REPO_TIER": 1,
+        "APPROVE_DEPTH": 5000,
+        "SOLO_APPROVE": 1,
+        "MERGE_PROTECTED": 1,
+        "FLAG": 1
+      }
+    }
+  },
+  "fees": null
+}

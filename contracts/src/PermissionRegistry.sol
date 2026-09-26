@@ -2,7 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
-import {HumanRegistry, CREDENTIAL_SELFIE} from "./HumanRegistry.sol";
+import {HumanRegistry, CREDENTIAL_SELFIE, CREDENTIAL_SIMULATED} from "./HumanRegistry.sol";
 import {IRoleMirror} from "./interfaces/IHumanVerifier.sol";
 import {IPenaltyStages} from "./interfaces/IPenalty.sol";
 
@@ -192,8 +192,10 @@ contract PermissionRegistry is AccessControl {
         return g.value;
     }
 
+    /// @dev Selfie Check and simulated (demo, no World proof) humans share the Selfie tier cap.
     function _isSelfie(bytes32 human) internal view returns (bool) {
-        return humans.levelOf(human) == CREDENTIAL_SELFIE;
+        uint8 level = humans.levelOf(human);
+        return level == CREDENTIAL_SELFIE || level == CREDENTIAL_SIMULATED;
     }
 
     function has(bytes32 human, bytes32 perm, uint64 minValue) public view returns (bool) {

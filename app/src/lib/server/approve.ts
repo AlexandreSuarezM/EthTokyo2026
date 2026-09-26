@@ -35,5 +35,6 @@ export async function approveDeps(): Promise<ApproveDeps> {
     attester,
     relayer,
     chain: { chainId: env.CHAIN_ID, humanRegistry: registry, validationReceipts: config.contracts.ValidationReceipts },
+    mode: env.WORLD_ID_MODE,
   };
 }

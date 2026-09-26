@@ -56,7 +56,7 @@ type Harness = {
   relayer: { fail?: RelayError | Error };
   humans: Map<Address, Hex>;
   clock: { now: number };
-  enroll(level?: 1 | 2): Promise<Human>;
+  enroll(level?: 1 | 2 | 3): Promise<Human>;
 };
 
 async function harness(world = worldAccepts()): Promise<Harness> {
@@ -87,7 +87,7 @@ async function harness(world = worldAccepts()): Promise<Harness> {
     randomId: () => (++id).toString(16).padStart(64, "0"),
     randomNonce: () => ++nonce,
   };
-  const enroll = async (level: 1 | 2 = 1): Promise<Human> => {
+  const enroll = async (level: 1 | 2 | 3 = 1): Promise<Human> => {
     const wallet = privateKeyToAccount(generatePrivateKey());
     const humanId = rand32();
     const sessionId = newSessionId();
@@ -418,5 +418,57 @@ describe("accept → receipt", () => {
     expect(res.status).toBe(400);
     expect(res.headers.get("cache-control")).toBe("no-store");
     expect(await res.json()).toMatchObject({ error: "invalid_request" });
+  });
+});
+
+describe("WORLD_ID_MODE=simulated", () => {
+  let h: Harness;
+  beforeEach(async () => {
+    h = await harness();
+    h.deps.mode = "simulated";
+  });
+  afterEach(() => h.store.close());
+
+  it("a simulated human approves with the wallet signature only; World is never called", async () => {
+    const v = await h.enroll(3);
+    const prep = await prepareApproval(h.deps, { proposalId: (await open(h)).id });
+    const res = await completeApproval(h.deps, { approvalId: prep.approvalId, signature: await sign(v.wallet, prep) });
+    expect(res).toMatchObject({ status: "recorded", humanId: v.humanId });
+    expect(h.world.calls).toHaveLength(0);
+    expect(h.relayed).toHaveLength(1);
+    const saved = await h.store.receiptOf(approvalKey(prep.typedData.message.repoId, prep.typedData.message.commitHash, v.humanId));
+    expect(JSON.parse(saved!.worldResult)).toEqual({ simulated: true, approvalDigest: prep.approvalDigest });
+
+    // still one approval = one receipt
+    const again = await prepareApproval(h.deps, { proposalId: prep.proposal.id });
+    expect(await codeOf(completeApproval(h.deps, { approvalId: again.approvalId, signature: await sign(v.wallet, again) }))).toBe("replayed");
+  });
+
+  it("a real (Orb or Selfie) human can't be approved for without a World proof", async () => {
+    for (const level of [1, 2] as const) {
+      const v = await h.enroll(level);
+      const prep = await prepareApproval(h.deps, { proposalId: (await open(h)).id });
+      expect(await codeOf(completeApproval(h.deps, { approvalId: prep.approvalId, signature: await sign(v.wallet, prep) }))).toBe(
+        "not_enrolled",
+      );
+    }
+    expect(h.relayed).toHaveLength(0);
+  });
+
+  it("an unenrolled wallet is refused", async () => {
+    const stranger = privateKeyToAccount(generatePrivateKey());
+    const prep = await prepareApproval(h.deps, { proposalId: (await open(h)).id });
+    const signature = await sign(stranger, prep);
+    expect(await codeOf(completeApproval(h.deps, { approvalId: prep.approvalId, signature }))).toBe("not_enrolled");
+  });
+
+  it("real mode still requires the World ID result, and refuses a simulated human's proof", async () => {
+    h.deps.mode = "real";
+    const sim = await h.enroll(3);
+    const prep = await prepareApproval(h.deps, { proposalId: (await open(h)).id });
+    const signature = await sign(sim.wallet, prep);
+    expect(await codeOf(completeApproval(h.deps, { approvalId: prep.approvalId, signature }))).toBe("invalid_request");
+    // a Proof of Human proof for a human enrolled as SIMULATED: credential mismatch
+    expect(await codeOf(completeApproval(h.deps, await acceptBody(sim, prep)))).toBe("rejected");
   });
 });

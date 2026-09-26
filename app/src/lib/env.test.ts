@@ -7,8 +7,10 @@ import {
   PUBLIC_ENV_VARS,
   SEPOLIA_CHAIN_ID,
   SERVER_ENV_VARS,
+  isSimulated,
   missingEnv,
   parseServerEnv,
+  simulatedMark,
 } from "@/lib/env";
 
 // Fresh random keys per run: no key material in the repo.
@@ -53,6 +55,16 @@ describe("parseServerEnv", () => {
     expect(env.CHAIN_ID).toBe(SEPOLIA_CHAIN_ID);
     expect(env.DATABASE_URL).toBe(LOCAL_DATABASE_URL);
     expect(env.GITHUB_TOKEN).toBeUndefined();
+    expect(env.WORLD_ID_MODE).toBe("real");
+  });
+
+  it("accepts WORLD_ID_MODE real|simulated only, and marks simulated responses", () => {
+    expect(parseServerEnv({ ...valid, WORLD_ID_MODE: "simulated" }).WORLD_ID_MODE).toBe("simulated");
+    expect(problems({ ...valid, WORLD_ID_MODE: "fake" }).join()).toContain("WORLD_ID_MODE");
+    expect(isSimulated({ WORLD_ID_MODE: "simulated" })).toBe(true);
+    expect(isSimulated({})).toBe(false);
+    expect(simulatedMark({ WORLD_ID_MODE: "simulated" })).toEqual({ simulated: true });
+    expect(simulatedMark({ WORLD_ID_MODE: "real" })).toEqual({});
   });
 
   it("normalises private keys to 0x-prefixed hex", () => {

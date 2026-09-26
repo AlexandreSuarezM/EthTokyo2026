@@ -47,6 +47,9 @@ contract DeployTest is Test {
         // no ruling roles are handed out at deploy time (they must go to enrolled humans)
         assertFalse(d.receipts.hasRole(d.receipts.FORENSICS_ROLE(), deployer));
         assertFalse(d.ledger.hasRole(d.ledger.EVALUATOR_ROLE(), deployer));
+        // no oracle unless the preset names one
+        assertFalse(d.receipts.hasRole(d.receipts.ORACLE_ROLE(), operator));
+        assertFalse(d.receipts.hasRole(d.receipts.ORACLE_ROLE(), deployer));
 
         // the broadcaster stays admin when ADMIN is not set
         assertTrue(d.humans.hasRole(bytes32(0), deployer));
@@ -54,7 +57,7 @@ contract DeployTest is Test {
     }
 
     function test_DeployAppliesEnvironment() public {
-        string[3] memory envs = ["team-default", "regulated-fintech", "solo-startup"];
+        string[4] memory envs = ["team-default", "regulated-fintech", "solo-startup", "demo"];
         for (uint256 e; e < envs.length; ++e) {
             string memory json = _json(envs[e]);
             Deploy.Deployment memory d = script.deploy(_params(envs[e]));
@@ -103,6 +106,20 @@ contract DeployTest is Test {
                 }
             }
         }
+    }
+
+    function test_DemoPresetMakesTheOperatorTheOracle() public {
+        Deploy.Deployment memory d = script.deploy(_params("demo"));
+        assertTrue(d.receipts.hasRole(d.receipts.ORACLE_ROLE(), operator)); // "oracle": "operator" = the relayer
+        assertFalse(d.receipts.hasRole(d.receipts.ORACLE_ROLE(), DEFAULT_SENDER));
+        assertEq(d.receipts.appealWindow(), 0);
+        assertEq(d.receipts.liabilityWindow(), 365 days);
+
+        // two mistakes reach stage 2: base 100, then 100 + 100% of 100
+        (uint32 base,, uint32 escBps,, uint32 s2,, uint64 fade) = d.ledger.config();
+        assertLt(base, s2);
+        assertGe(base + base + (uint256(base) * escBps) / 10_000, s2);
+        assertEq(fade, 1 days);
     }
 
     function test_DeployFeesFromDecimalStrings() public {

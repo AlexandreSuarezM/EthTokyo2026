@@ -1,5 +1,13 @@
 # Build plan — granular, parallel
 
+> **Scope change (2026-09-26): single-user demo.** One person is the **validator** (presses Approve / Reject);
+> the **oracle** is the server that generated the code and penalizes a wrong approval on-chain
+> (`ValidationReceipts.oraclePenalize`, `ORACLE_ROLE` = the relayer in `environments/demo.json`).
+> **Dropped:** appeals UI, evaluator, multiple humans, World ID staging/sandbox, and **CC-12 … CC-18 as planned**
+> (the contracts keep appeals / evaluator / forensics, tested but not demoed). World ID runs
+> `WORLD_ID_MODE=real|simulated`; the demo uses `simulated` (credential level 3, never Orb) because our only real
+> World ID has no 4.0 credential. CC-11 shrinks to: the oracle penalty API + standing reads. Live order: `docs/STATUS.md`.
+
 > **Scope change (2026-09-25): ENS is cut.** Target prizes: **World IDKit** and **World ID for Agents** only.
 > CC-4 … CC-7 are **DEFERRED (ENS cut)**; any ENS step inside another task (CC-9 subname, CC-11 ENS
 > cross-check, CC-14 "show the ENS name", CC-19 `setup-org.ts`) is skipped. Stage 1 ("score published")
@@ -259,7 +267,7 @@ not enrolled / no permission) returns a typed error and performs NO transaction 
 Tests for each path.
 ```
 
-### 🔵 CC-11 Forensics, appeals, forgiveness API *(Lane 3)*
+### 🔵 CC-11 Forensics, appeals, forgiveness API *(Lane 3)* — REDUCED: oracle penalty API + standing reads (single-user demo)
 ```
 Routes (server-side role keys, each held by an enrolled human per AUDIT.md):
 POST /api/forensics/audit {receiptId, correct, evidence, major}  -> ValidationReceipts.audit
@@ -270,7 +278,7 @@ Decode custom errors into readable messages (NotEnrolled, OwnReceipt, SameReview
 AppealWindowOpen, LiabilityWindowClosed, Banned, ...). Tests on anvil.
 ```
 
-### 🔵 CC-12 Agent with human approval *(Lane 4)*
+### 🔵 CC-12 Agent with human approval *(Lane 4)* — DROPPED as planned (single-user demo)
 ```
 Read https://docs.world.org/agents/human-in-the-loop/integrate.md and the SDK reference.
 Build app/lib/agent/: a DurableAgent (per the docs' packages) with tools:
@@ -283,7 +291,7 @@ Use the event's World ID for Agents dev environment (docs/DECISIONS.md Q8).
 Test: approved -> merge called; cancelled/expired/denied -> merge never called.
 ```
 
-### 🔵 CC-13 GitHub merge + receipt linkage *(Lane 4)* — stretch
+### 🔵 CC-13 GitHub merge + receipt linkage *(Lane 4)* — stretch — DROPPED as planned (single-user demo)
 ```
 app/lib/github/: create a branch + PR in the demo target repo with the agent's diff, compute the
 commit/tree hash we bind approvals to, and merge only through the protected-branch path (the
@@ -292,14 +300,14 @@ Add a periodic audit job: list merged commits on main, flag any without a receip
 (unmarked merge). Tests with a mocked GitHub API.
 ```
 
-### 🔵 CC-14 Enroll page *(Lane 5)*
+### 🔵 CC-14 Enroll page *(Lane 5)* — DROPPED as planned (single-user demo)
 ```
 app/(pages)/enroll: IDKit widget for Proof of Human, fallback button for Selfie Check, clear states for
 success, cancelled, expired, already enrolled, credential unavailable. Show the resulting ENS name.
 Start against a mocked /api/enroll until Lane 3 merges; keep the mock behind an env flag.
 ```
 
-### 🔵 CC-15 Session page *(Lane 5)*
+### 🔵 CC-15 Session page *(Lane 5)* — DROPPED as planned (single-user demo)
 ```
 app/(pages)/session: prompt box -> agent proposal (diff viewer) -> Accept / Deny with new input
 (shows round number; context resets each round) -> on Accept, the World ID approval widget
@@ -307,7 +315,7 @@ app/(pages)/session: prompt box -> agent proposal (diff viewer) -> Accept / Deny
 -> result: receipt id, PR link, merge status. Every failure path has a visible, specific state.
 ```
 
-### 🔵 CC-16 Forensics + directory pages *(Lane 5)*
+### 🔵 CC-16 Forensics + directory pages *(Lane 5)* — DROPPED as planned (single-user demo)
 ```
 app/(pages)/forensics: list receipts; "Was the validation right? Yes / No" with evidence text and
 a major toggle (calls /api/forensics/audit); appeal and finalize buttons; live score/stage of the
@@ -319,7 +327,7 @@ PenaltyLedger (scoreOf / stageOf). Name = account address (or a local display la
 Addresses from config/<chainId>.json. No hard-coded values.
 ```
 
-### 🔵 CC-17 Merge gate *(Lane 6)* — stretch
+### 🔵 CC-17 Merge gate *(Lane 6)* — stretch — DROPPED as planned (single-user demo)
 ```
 Write a GitHub Action (gate/ + .github/workflows/hitl-gate.yml in the DEMO TARGET repo template)
 that posts the required status check `hitl-gate`: success only if ValidationReceipts.canMerge(merger,
@@ -328,7 +336,7 @@ whose receipt counts. No ENS. Read addresses from config/<chainId>.json; RPC fro
 Document the branch protection settings in docs/GATE.md.
 ```
 
-### 🔵 CC-18 Tests end to end *(Lane 7)* — stretch
+### 🔵 CC-18 Tests end to end *(Lane 7)* — stretch — DROPPED as planned (single-user demo)
 ```
 Playwright on a local stack (anvil + contracts deployed via CC-2 + app with mocked World ID):
 1 happy path (enroll -> prompt -> deny -> accept -> approve -> receipt -> merge -> audit wrong ->

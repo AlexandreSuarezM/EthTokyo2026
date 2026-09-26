@@ -2,7 +2,7 @@ import "server-only";
 import { zeroAddress, zeroHash } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { createAttester } from "@/lib/chain/attester";
-import type { Store } from "@/lib/db/store";
+import type { CredentialLevel, Store } from "@/lib/db/store";
 import { completeEnrollment, startEnrollment, type EnrollDeps } from "@/lib/enroll/service";
 import { WorldError } from "@/lib/world/errors";
 
@@ -36,8 +36,8 @@ export function devEnrollDeps(opts: {
 }
 
 export type DevResult =
-  | { ok: true; step: "start"; status: "pending"; enrollmentId: string; sessionSignal: string; credentialLevel: 1 | 2 }
-  | { ok: true; step: "start" | "complete"; status: "attested"; credentialLevel: 1 | 2; sessionIdPrefix: string; attesterSigned: true }
+  | { ok: true; step: "start"; status: "pending"; enrollmentId: string; sessionSignal: string; credentialLevel: CredentialLevel }
+  | { ok: true; step: "start" | "complete"; status: "attested"; credentialLevel: CredentialLevel; sessionIdPrefix: string; attesterSigned: true }
   | { ok: false; error: string; message: string; worldCode: string | null };
 
 /** "session_" + the first 6 characters of the id itself; never the full session_id. */

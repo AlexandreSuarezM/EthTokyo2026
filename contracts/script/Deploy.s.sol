@@ -24,6 +24,7 @@ import {MockUSD} from "../src/mocks/Mocks.sol";
 ///   HITL_ENV                  optional  preset name in /environments (default: team-default)
 ///   ADMIN                     optional  final DEFAULT_ADMIN_ROLE holder (default: the broadcaster)
 ///   OPERATOR                  optional  orchestrator/relayer holding OPERATOR_ROLE (default: the broadcaster)
+///                                       the preset's "receipts.oracle": "operator" also makes it the ORACLE
 ///   FEE_TREASURY              optional  fee recipient when the preset has fees (default: ADMIN)
 ///   DEPLOY_WORLD_ID_VERIFIER  optional  true = also deploy the World ID 3.x on-chain adapter (default: false)
 ///   WORLD_ID_ROUTER, WORLD_APP_ID, WORLD_ACTION   required only when DEPLOY_WORLD_ID_VERIFIER=true
@@ -58,6 +59,7 @@ contract Deploy is Script {
         address operator;
         address attester;
         address feeTreasury;
+        address oracle; //          0 unless the preset names one
     }
 
     error ZeroAttester();
@@ -144,10 +146,20 @@ contract Deploy is Script {
                 a.attester
             );
         d.humans.setAttester(a.attester);
+        a.oracle = _applyOracle(d, json, a.operator);
 
         if (vm.keyExistsJson(json, ".fees.token")) d.feeToken = _applyFees(d, json, a.feeTreasury);
         _applyRepos(d, json);
         _applyPresets(d, json);
+    }
+
+    /// "receipts.oracle": "operator" grants ORACLE_ROLE to the operator (relayer); any other value
+    /// must be an address. Absent: no oracle (rulings only by enrolled humans).
+    function _applyOracle(Deployment memory d, string memory json, address operator) internal returns (address oracle) {
+        if (!vm.keyExistsJson(json, ".receipts.oracle")) return address(0);
+        string memory o = vm.parseJsonString(json, ".receipts.oracle");
+        oracle = keccak256(bytes(o)) == keccak256("operator") ? operator : vm.parseAddress(o);
+        d.receipts.grantRole(d.receipts.ORACLE_ROLE(), oracle);
     }
 
     function _penaltyConfig(string memory json) internal pure returns (PenaltyLedger.Config memory) {
@@ -242,6 +254,7 @@ contract Deploy is Script {
         vm.serializeAddress(o, "admin", a.admin);
         vm.serializeAddress(o, "operator", a.operator);
         vm.serializeAddress(o, "attester", a.attester);
+        vm.serializeAddress(o, "oracle", a.oracle);
         string memory out = vm.serializeString(o, "contracts", contracts);
 
         string memory path = string.concat(
@@ -255,6 +268,7 @@ contract Deploy is Script {
         console.log("environment       ", envName);
         console.log("admin             ", a.admin);
         console.log("attester          ", a.attester);
+        console.log("oracle            ", a.oracle);
         console.log("HumanRegistry     ", address(d.humans));
         console.log("PermissionRegistry", address(d.perms));
         console.log("ValidationReceipts", address(d.receipts));

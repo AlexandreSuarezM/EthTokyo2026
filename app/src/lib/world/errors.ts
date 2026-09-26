@@ -48,7 +48,11 @@ export class WorldError extends Error {
 }
 
 export function errorResponse(e: WorldError): Response {
-  return Response.json({ error: e.code, message: e.message }, { status: e.status, headers: { "cache-control": "no-store" } });
+  const simulated = process.env.WORLD_ID_MODE === "simulated" ? { simulated: true } : {};
+  return Response.json(
+    { error: e.code, message: e.message, ...simulated },
+    { status: e.status, headers: { "cache-control": "no-store" } },
+  );
 }
 
 /**

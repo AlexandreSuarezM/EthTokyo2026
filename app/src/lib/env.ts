@@ -5,6 +5,7 @@ export const SERVER_ENV_VARS = [
   "WORLD_RP_ID",
   "WORLD_SIGNING_KEY",
   "WORLD_ENVIRONMENT",
+  "WORLD_ID_MODE",
   "ATTESTER_PRIVATE_KEY",
   "RELAYER_PRIVATE_KEY",
   "SEPOLIA_RPC_URL",
@@ -48,6 +49,8 @@ const serverSchema = z
     WORLD_SIGNING_KEY: z.string().regex(hex32, "must be a 32-byte hex key"),
     // "staging" only for the World simulator; a deployment accepts exactly one environment.
     WORLD_ENVIRONMENT: z.enum(["production", "staging"]),
+    // "simulated" (demo only) skips the World ID proof and enrolls at the SIMULATED level (never Orb).
+    WORLD_ID_MODE: z.enum(["real", "simulated"]),
     ATTESTER_PRIVATE_KEY: privateKey,
     RELAYER_PRIVATE_KEY: privateKey,
     SEPOLIA_RPC_URL: z.url({ protocol: /^https?$/ }),
@@ -65,6 +68,14 @@ const serverSchema = z
   });
 
 export type ServerEnv = z.infer<typeof serverSchema>;
+export type WorldIdMode = ServerEnv["WORLD_ID_MODE"];
+
+/** True when the server runs without real World ID proofs (WORLD_ID_MODE=simulated). */
+export const isSimulated = (env: Record<string, string | undefined> = process.env) => env.WORLD_ID_MODE === "simulated";
+
+/** Added to every API response in simulated mode, so no client can mistake it for a real proof. */
+export const simulatedMark = (env: Record<string, string | undefined> = process.env) =>
+  isSimulated(env) ? { simulated: true as const } : {};
 
 export class EnvError extends Error {
   constructor(readonly problems: string[]) {
@@ -81,6 +92,7 @@ export function parseServerEnv(env: Record<string, string | undefined>): ServerE
     ...Object.fromEntries(SERVER_ENV_VARS.map((name) => [name, env[name] || undefined])),
     CHAIN_ID: env.CHAIN_ID || String(SEPOLIA_CHAIN_ID),
     WORLD_ENVIRONMENT: env.WORLD_ENVIRONMENT || "production",
+    WORLD_ID_MODE: env.WORLD_ID_MODE || "real",
     DATABASE_URL: env.DATABASE_URL || (production ? undefined : LOCAL_DATABASE_URL),
   };
 

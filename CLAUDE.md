@@ -15,6 +15,14 @@ Read `DESIGN.md` (model), `AUDIT.md` (security findings + trust assumptions), `d
 `docs/STATUS.md` (deadline, what's done, today's order).
 
 ## Current scope
+- **Single-user demo (scope change 2026-09-26).** One person plays the **validator** (the human pressing
+  Approve / Reject). The **oracle** is the server that generated the code and knows if it was wrong: it
+  penalizes a wrong approval on-chain through `ValidationReceipts.oraclePenalize` (`ORACLE_ROLE`; in
+  `environments/demo.json` the oracle is the relayer address, a demo trust assumption, see DECISIONS/LIMITS).
+- **Dropped:** appeals UI, evaluator, multiple humans, World ID staging/sandbox, and CC-12..CC-18 as planned.
+  The contracts keep appeals/evaluator/forensics (tested), they are just not in the demo.
+- `WORLD_ID_MODE=real|simulated` (server-only, default `real`). Simulated skips the World proof, enrolls at
+  credential level 3 = SIMULATED (never Orb, capped like Selfie) and marks every API response `simulated: true`.
 - **ENS is out of scope** (time + ENSv2 beta instability). Don't build ENS features unless the task is the
   BUILD_PLAN "Bonus" section, and only after Saturday 20:00 Madrid with everything else done.
 - Stage 1 ("score published") = published **on-chain**: `PenaltyLedger` `Penalized` / `Forgiven` events and
@@ -33,7 +41,7 @@ Read `DESIGN.md` (model), `AUDIT.md` (security findings + trust assumptions), `d
 - `docs/` DECISIONS, RULES, TRUST, DEBRIEF, LIMITS, BUILD_PLAN
 
 ## Commands
-- `cd contracts && forge build && forge test` (must stay green; currently 75 tests)
+- `cd contracts && forge build && forge test` (must stay green; currently 92 tests)
 - `cd app && npm run lint && npm run typecheck && npm test`
 - Local chain demo (legacy orchestrator): `cd contracts && forge build && cd ../legacy && npm install && node demo.js`
 
@@ -41,6 +49,7 @@ Read `DESIGN.md` (model), `AUDIT.md` (security findings + trust assumptions), `d
 - No token is minted at validation. Penalties are minted only by `ValidationReceipts` (MINTER_ROLE)
   after a forensics ruling on a real receipt, with evidence, inside the liability window, after due process.
 - Anyone who rules (forensics, appeals, evaluator) must be an **enrolled human**; compare humans, never addresses.
+  Only exception: the **oracle** (`ORACLE_ROLE`, AUDIT C-10), which still goes through the normal ruling path.
   Nobody rules on their own receipt; the appeal reviewer is a different human from the judge and the validator.
 - Penalty tokens are non-transferable and non-burnable. Use `_mint`, never `_safeMint`, for penalties.
 - The score is capped; decay rates are snapshotted per account; config changes are never retroactive on decay.

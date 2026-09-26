@@ -10,7 +10,8 @@ export { normalizeNullifier };
  * so uniqueness is enforced by the database, atomically, never by a read-then-write.
  */
 
-export type CredentialLevel = 1 | 2; // 1 = ORB (Proof of Human), 2 = SELFIE; same values as HumanRegistry
+// 1 = ORB (Proof of Human), 2 = SELFIE, 3 = SIMULATED (demo, no World proof); same values as HumanRegistry
+export type CredentialLevel = 1 | 2 | 3;
 
 export type SessionRecord = {
   humanId: `0x${string}`;

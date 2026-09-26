@@ -15,6 +15,8 @@ import { z } from "zod";
 import { APPROVAL_TYPES, receiptsDomain, type Attester, type Domains } from "@/lib/chain/attester";
 import { RelayError, type Relayer } from "@/lib/chain/relayer";
 import type { Proposal, Store } from "@/lib/db/store";
+import type { WorldIdMode } from "@/lib/env";
+import { SIMULATED_LEVEL } from "@/lib/enroll/service";
 import { commitHashOf, repoIdOf, type RepoSource } from "@/lib/repo/source";
 import { WorldError } from "@/lib/world/errors";
 import { signalHash } from "@/lib/world/identity";
@@ -50,6 +52,8 @@ export type ApproveDeps = {
   attester: Pick<Attester, "signHumanAttestation">;
   relayer: Pick<Relayer, "submitValidate">;
   chain: Domains;
+  /** "simulated" (demo only): no World ID proof; only SIMULATED-level humans may approve. Default "real". */
+  mode?: WorldIdMode;
   now?: () => number;
   randomId?: () => string;
   randomNonce?: () => bigint;
@@ -108,7 +112,7 @@ const prepareBody = z.strictObject({ proposalId: z.string().regex(ID) });
 const completeBody = z.strictObject({
   approvalId: z.string().regex(ID),
   signature: z.string().regex(/^0x[0-9a-fA-F]{130}$/),
-  result: z.unknown(),
+  result: z.unknown().optional(), // required in real mode, ignored in simulated mode
 });
 
 function parseBody<T extends z.ZodType>(schema: T, input: unknown): z.infer<T> {
@@ -222,7 +226,8 @@ export function fromRevert(name: string | undefined): WorldError {
 /** Step 2 of accept: World ID proof at this moment + the wallet signature → one receipt. */
 export async function completeApproval(deps: ApproveDeps, body: unknown): Promise<CompleteResult> {
   const { approvalId, signature, result: raw } = parseBody(completeBody, body);
-  const result = parseClientResult(sessionResult, raw);
+  const simulated = deps.mode === "simulated";
+  const result = simulated ? null : parseClientResult(sessionResult, raw);
   const now = (deps.now ?? defaultNow)();
 
   const pending = await deps.store.getPendingApproval(approvalId);
@@ -230,7 +235,7 @@ export async function completeApproval(deps: ApproveDeps, body: unknown): Promis
   if (pending.expiresAt < now) throw new WorldError("expired", "This approval expired. Accept again.");
 
   // The proof must be made for this exact approval (checked before calling World).
-  if (result.responses[0].signal_hash.toLowerCase() !== signalHash(approveSignal(pending.digest))) {
+  if (result && result.responses[0].signal_hash.toLowerCase() !== signalHash(approveSignal(pending.digest))) {
     throw new WorldError("rejected", "This World ID proof was made for a different approval.");
   }
 
@@ -251,19 +256,37 @@ export async function completeApproval(deps: ApproveDeps, body: unknown): Promis
     throw new WorldError("invalid_request", "The wallet signature is malformed.");
   }
 
-  // World ID at this moment → session_id → the human stored at enrollment.
-  const session = await verifySession(result, deps.verify);
-  const enrolled = await deps.store.humanOfSession(session.sessionId);
-  if (!enrolled) throw new WorldError("not_enrolled", "This World ID session does not belong to an enrolled person.");
-  if (session.level !== enrolled.credentialLevel) {
-    throw new WorldError("rejected", "The proof uses a different credential than the enrollment.");
+  let humanId: Hex;
+  let sessionNullifier: string | null = null;
+  let worldResult: string;
+  if (result) {
+    // World ID at this moment → session_id → the human stored at enrollment.
+    const session = await verifySession(result, deps.verify);
+    const enrolled = await deps.store.humanOfSession(session.sessionId);
+    if (!enrolled) throw new WorldError("not_enrolled", "This World ID session does not belong to an enrolled person.");
+    if (session.level !== enrolled.credentialLevel) {
+      throw new WorldError("rejected", "The proof uses a different credential than the enrollment.");
+    }
+    const signerHuman = await onChain(() => deps.registry.humanOf(signer));
+    if (signerHuman === zeroHash) throw new WorldError("not_enrolled", "The signing wallet is not an enrolled account.");
+    if (signerHuman.toLowerCase() !== enrolled.humanId.toLowerCase()) {
+      throw new WorldError("rejected", "The wallet that signed is not the account of the person who proved.");
+    }
+    humanId = enrolled.humanId;
+    sessionNullifier = session.sessionNullifier;
+    worldResult = JSON.stringify(result);
+  } else {
+    // Simulated mode: no World proof. Only a SIMULATED human's enrolled wallet may approve, so a
+    // real (Orb / Selfie) human can never be approved for without a proof.
+    const signerHuman = await onChain(() => deps.registry.humanOf(signer));
+    if (signerHuman === zeroHash) throw new WorldError("not_enrolled", "The signing wallet is not an enrolled account.");
+    const enrolled = await deps.store.sessionOfHuman(signerHuman);
+    if (!enrolled || enrolled.credentialLevel !== SIMULATED_LEVEL) {
+      throw new WorldError("not_enrolled", "Simulated mode approves only simulated humans. Real humans need a World ID proof.");
+    }
+    humanId = enrolled.humanId;
+    worldResult = JSON.stringify({ simulated: true, approvalDigest: digest });
   }
-  const signerHuman = await onChain(() => deps.registry.humanOf(signer));
-  if (signerHuman === zeroHash) throw new WorldError("not_enrolled", "The signing wallet is not an enrolled account.");
-  if (signerHuman.toLowerCase() !== enrolled.humanId.toLowerCase()) {
-    throw new WorldError("rejected", "The wallet that signed is not the account of the person who proved.");
-  }
-  const humanId = enrolled.humanId;
 
   const proposal = await deps.store.getProposal(pending.proposalId);
   if (!proposal) throw new WorldError("verification_unavailable", "The proposal for this approval is missing.");
@@ -276,7 +299,7 @@ export async function completeApproval(deps: ApproveDeps, body: unknown): Promis
   const taken = await deps.store.takePendingApproval(approvalId);
   if (!taken) throw new WorldError("replayed", "This approval was already used.");
   if (taken.expiresAt < now) throw new WorldError("expired", "This approval expired. Accept again.");
-  if (!(await deps.store.recordNullifier(APPROVE_NULLIFIER_ACTION, session.sessionNullifier, humanId))) {
+  if (sessionNullifier !== null && !(await deps.store.recordNullifier(APPROVE_NULLIFIER_ACTION, sessionNullifier, humanId))) {
     throw new WorldError("replayed", "This World ID proof was already used.");
   }
   const key = approvalKey(message.repoId, message.commitHash, humanId);
@@ -284,8 +307,7 @@ export async function completeApproval(deps: ApproveDeps, body: unknown): Promis
     throw new WorldError("replayed", "This person already approved this change.");
   }
 
-  // Hash of the verified World ID result; the result itself is kept off-chain for audit.
-  const worldResult = JSON.stringify(result);
+  // Hash of the verified World ID result (or the simulated marker); kept off-chain for audit.
   const proofRef = keccak256(stringToHex(worldResult));
   // presence = false: no repo requires a live proof (liveProofTier = 4, docs/RULES.md).
   const attestation = await deps.attester.signHumanAttestation({ approvalDigest: digest, proofRef, presence: false });

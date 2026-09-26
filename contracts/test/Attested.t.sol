@@ -181,8 +181,8 @@ contract AttestedTest is Base {
 
     function test_AttestedEnrollInputGuards() public {
         uint256 deadline = block.timestamp + 10 minutes;
-        for (uint8 level; level < 4; ++level) {
-            if (level == ORB || level == SELFIE) continue;
+        for (uint8 level; level < 6; ++level) {
+            if (level == ORB || level == SELFIE || level == humans.LEVEL_SIMULATED()) continue;
             bytes memory sig = _enrollSig(attesterPk, dave, H_DAVE, SESSION, level, deadline);
             vm.prank(dave);
             vm.expectRevert(HumanRegistry.BadLevel.selector);
