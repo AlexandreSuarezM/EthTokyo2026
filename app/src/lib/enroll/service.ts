@@ -28,7 +28,7 @@ import {
  */
 
 export const PENDING_TTL_SECONDS = 10 * 60;
-export const ATTESTATION_TTL_SECONDS = 30 * 60;
+export const ATTESTATION_TTL_SECONDS = 10 * 60;
 const SESSION_NULLIFIER_ACTION = "session";
 
 export type RegistryReader = {
