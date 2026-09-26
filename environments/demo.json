@@ -1,6 +1,6 @@
 {
   "name": "demo",
-  "description": "Single-user demo. One validator approves or rejects the AI's code; the oracle (the server that generated the code, here the relayer address) penalizes a wrong approval immediately (no appeal window). Two mistakes reach stage 2 (100, then 100 + 100% = 300 >= 200); a third bans (>= 500). Fades fast (100 points per day) so recovery is visible; the liability window is long (365 days).",
+  "description": "Single-user demo on Sepolia. The user (validator) approves or rejects the AI's code. The judge (a server oracle, here the relayer address) mints a soulbound penalty token when approved code was wrong, and may lift a restriction early (the token stays). Count-based ladder: token n weighs 100 x n and fades 100 per 5 minutes, and any score means 'restricted' (no AI): token 1 = 5 min, token 2 = 10 min, token 3 = banned forever (no fade, no lift).",
   "policy": {
     "liveProofTier": 4,
     "allowSelfApproval": true,
@@ -17,12 +17,15 @@
   },
   "penalties": {
     "base": 100,
-    "majorMultiplier": 2,
-    "escalationPct": 100,
+    "majorMultiplier": 1,
+    "escalationPct": 0,
     "maxScore": 1000,
-    "stage2At": 200,
-    "stage3At": 500,
-    "fadeDays": 1
+    "stage2At": 1,
+    "stage3At": 1000,
+    "fadeSeconds": 300,
+    "banAtCount": 3,
+    "weightByCount": true,
+    "judge": "operator"
   },
   "repos": [
     {

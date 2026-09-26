@@ -47,11 +47,18 @@ interface IScorePublisher {
 ///  FORGIVE     EVALUATOR_ROLE may reduce a score to speed recovery. The evaluator must be an
 ///              enrolled human (so "never your own" compares unique humans), and must give a
 ///              reason hash. The NFT records stay: history is never deleted.
+///  LADDER      Optional, off by default (demo preset): `weightByCount` makes token n weigh
+///              base x n (token 1 restricts for one fadePeriod, token 2 for two), and
+///              `banAtCount` bans a human permanently once they hold that many tokens: no fade
+///              and no forgiveness can undo it.
+///  JUDGE       JUDGE_ROLE (demo trust assumption: a server, not an enrolled human) may lift a
+///              restriction early with a reason (score -> 0; the token stays). Never a ladder ban.
 contract PenaltyLedger is ERC721, AccessControl, IERC5192, IPenaltyMinter {
     using Strings for uint256;
 
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE"); //       receipts contract only
     bytes32 public constant EVALUATOR_ROLE = keccak256("EVALUATOR_ROLE"); // may forgive
+    bytes32 public constant JUDGE_ROLE = keccak256("JUDGE_ROLE"); //         may lift a restriction (demo)
 
     uint256 internal constant WAD = 1e18;
     uint256 internal constant BPS = 10_000;
@@ -64,6 +71,12 @@ contract PenaltyLedger is ERC721, AccessControl, IERC5192, IPenaltyMinter {
         uint32 stage2At; //         points: no AI access
         uint32 stage3At; //         points: banned
         uint64 fadePeriod; //       seconds for one `base` to fade to zero
+    }
+
+    /// Count-based ladder; all zero = off (score-based behaviour only).
+    struct Ladder {
+        uint16 banAtCount; //   0 = off; holding this many tokens = banned forever
+        bool weightByCount; //  token n weighs base x n instead of the score-based escalation
     }
 
     struct Account {
@@ -83,18 +96,21 @@ contract PenaltyLedger is ERC721, AccessControl, IERC5192, IPenaltyMinter {
 
     HumanRegistry public immutable humans;
     Config public config;
+    Ladder public ladder;
     IScorePublisher public publisher;
 
     uint256 public nextId = 1;
     mapping(bytes32 human => Account) internal _accounts;
     mapping(uint256 tokenId => Penalty) internal _penalties;
     mapping(uint256 receiptId => uint256 tokenId) public penaltyOfReceipt;
+    mapping(bytes32 human => uint16) public penaltyCount;
 
     event Penalized(
         uint256 indexed tokenId, bytes32 indexed human, uint256 indexed receiptId, uint256 weightWad, uint256 scoreWad, uint8 stage
     );
     event Forgiven(bytes32 indexed human, address indexed evaluator, uint256 amountWad, uint256 scoreWad, bytes32 reasonHash);
     event ConfigSet(Config config);
+    event LadderSet(Ladder ladder);
     event PublisherSet(address indexed publisher);
     event PublishFailed(bytes32 indexed human);
 
@@ -106,6 +122,7 @@ contract PenaltyLedger is ERC721, AccessControl, IERC5192, IPenaltyMinter {
     error SelfForgiveness();
     error ZeroReceipt();
     error NotEnrolled();
+    error BannedForever();
 
     constructor(HumanRegistry _humans, address admin, Config memory cfg) ERC721("HITL Penalty", "HITLP") {
         humans = _humans;
@@ -123,7 +140,13 @@ contract PenaltyLedger is ERC721, AccessControl, IERC5192, IPenaltyMinter {
     }
 
     function stageOf(bytes32 human) public view override returns (uint8) {
-        return _stageFor(scoreOf(human));
+        return _stage(human, scoreOf(human));
+    }
+
+    /// @notice True once a human holds `ladder.banAtCount` tokens: permanent, nothing lifts it.
+    function isBannedForever(bytes32 human) public view returns (bool) {
+        uint16 banAt = ladder.banAtCount;
+        return banAt != 0 && penaltyCount[human] >= banAt;
     }
 
     /// @notice Seconds until the score falls strictly below `thresholdPoints` (0 if already below).
@@ -160,7 +183,10 @@ contract PenaltyLedger is ERC721, AccessControl, IERC5192, IPenaltyMinter {
 
         Config memory c = config;
         uint256 cur = scoreOf(human);
-        uint256 weight = uint256(c.base) * WAD * (major ? c.majorMultiplier : 1) + cur * c.escalationBps / BPS;
+        uint16 count = ++penaltyCount[human];
+        uint256 weight = ladder.weightByCount
+            ? uint256(c.base) * WAD * (major ? c.majorMultiplier : 1) * count
+            : uint256(c.base) * WAD * (major ? c.majorMultiplier : 1) + cur * c.escalationBps / BPS;
         uint256 cap = uint256(c.maxScore) * WAD;
         uint256 next = cur + weight;
         if (next > cap) next = cap;
@@ -179,7 +205,7 @@ contract PenaltyLedger is ERC721, AccessControl, IERC5192, IPenaltyMinter {
         });
         _mint(to, tokenId); // no receiver hook: cannot be refused, no reentrancy
         emit Locked(tokenId);
-        uint8 stage = _stageFor(next);
+        uint8 stage = _stage(human, next);
         emit Penalized(tokenId, human, receiptId, next - cur, next, stage);
         _publish(human, to, next, stage);
     }
@@ -195,7 +221,20 @@ contract PenaltyLedger is ERC721, AccessControl, IERC5192, IPenaltyMinter {
         uint256 next = amountWad >= cur ? 0 : cur - amountWad;
         _store(human, next, config);
         emit Forgiven(human, msg.sender, cur - next, next, reasonHash);
-        _publish(human, humans.accountOf(human), next, _stageFor(next));
+        _publish(human, humans.accountOf(human), next, _stage(human, next));
+    }
+
+    /// @notice The judge lifts a restriction early: score -> 0, the tokens stay. Reason required.
+    ///         A ladder ban can never be lifted. The judge need not be enrolled (demo trust assumption).
+    function judgeLift(bytes32 human, bytes32 reasonHash) external onlyRole(JUDGE_ROLE) {
+        if (reasonHash == bytes32(0)) revert ReasonRequired();
+        if (isBannedForever(human)) revert BannedForever();
+        bytes32 self = humans.humanOf(msg.sender);
+        if (self != bytes32(0) && self == human) revert SelfForgiveness();
+        uint256 cur = scoreOf(human);
+        _store(human, 0, config);
+        emit Forgiven(human, msg.sender, cur, 0, reasonHash);
+        _publish(human, humans.accountOf(human), 0, _stage(human, 0));
     }
 
     /// @notice Permissionless resync of a human's published score. A caller of `finalize` can
@@ -203,12 +242,17 @@ contract PenaltyLedger is ERC721, AccessControl, IERC5192, IPenaltyMinter {
     ///         skipped); anyone can repair the mirror with this (audit L-03).
     function republish(bytes32 human) external {
         uint256 s = scoreOf(human);
-        _publish(human, humans.accountOf(human), s, _stageFor(s));
+        _publish(human, humans.accountOf(human), s, _stage(human, s));
     }
 
     // ============================================================== admin
     function setConfig(Config calldata cfg) external onlyRole(DEFAULT_ADMIN_ROLE) {
         _setConfig(cfg);
+    }
+
+    function setLadder(Ladder calldata l) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        ladder = l;
+        emit LadderSet(l);
     }
 
     function setPublisher(IScorePublisher p) external onlyRole(DEFAULT_ADMIN_ROLE) {
@@ -234,6 +278,10 @@ contract PenaltyLedger is ERC721, AccessControl, IERC5192, IPenaltyMinter {
             // rounded UP so a single `base` never outlasts `fadePeriod` (audit L-01)
             rateWad: uint128((uint256(c.base) * WAD + c.fadePeriod - 1) / c.fadePeriod)
         });
+    }
+
+    function _stage(bytes32 human, uint256 s) internal view returns (uint8) {
+        return isBannedForever(human) ? 3 : _stageFor(s);
     }
 
     function _stageFor(uint256 s) internal view returns (uint8) {
@@ -290,7 +338,7 @@ contract PenaltyLedger is ERC721, AccessControl, IERC5192, IPenaltyMinter {
             '{"trait_type":"weight","value":', (uint256(p.weightWad) / WAD).toString(), "},",
             '{"trait_type":"issued","display_type":"date","value":', uint256(p.mintedAt).toString(), "},",
             '{"trait_type":"current score","value":', (s / WAD).toString(), "},",
-            '{"trait_type":"current stage","value":', uint256(_stageFor(s)).toString(), "},",
+            '{"trait_type":"current stage","value":', uint256(_stage(p.human, s)).toString(), "},",
             '{"trait_type":"human","value":"', uint256(p.human).toHexString(32), '"},',
             '{"trait_type":"evidence","value":"', uint256(p.evidenceHash).toHexString(32), '"}]}'
         );

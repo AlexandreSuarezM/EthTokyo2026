@@ -130,6 +130,22 @@ validator is identified by their EIP-712 signature. This replaces "relayer submi
 - `WORLD_ENVIRONMENT` (default `production`) is the only environment the server accepts; `staging` is for the
   simulator only.
 
+## Demo ladder and judge (DEMO_PLAN step 1, 2026-09-26 13:30)
+
+- **Judge** = a server oracle at the RELAYER address, holding both `ValidationReceipts.ORACLE_ROLE` (mints penalty
+  tokens via `oraclePenalize`) and `PenaltyLedger.JUDGE_ROLE` (lifts restrictions via `judgeLift`). Neither requires
+  enrollment: a demo trust assumption (AUDIT C-10, C-12; `docs/LIMITS.md`). The preset says `"oracle": "operator"`
+  and `"judge": "operator"`; the deploy script grants both to the operator (relayer) address.
+- **Count-based ladder** (`PenaltyLedger.setLadder`, off by default so other presets keep today's behaviour):
+  `weightByCount` = token n weighs `base x n`; `banAtCount` = holding that many tokens is a permanent stage 3 that
+  no fade, forgive or lift undoes. Why: with score-based escalation a judge lift resets the score to 0, so token 2
+  would be no longer than token 1, and token 3 would not ban.
+- **`demo.json`**: base 100, `fadeSeconds` 300, `stage2At` 1 (any score of 1 point or more = "restricted", no AI),
+  `banAtCount` 3, `weightByCount` true. Token 1 = restricted ~5 min (until the score drops under 1 point, ~297 s),
+  token 2 = ~10 min, token 3 = banned forever. `judgeLift` sets the score to 0 (reason required, the token stays)
+  and reverts `BannedForever` on a ban. The deploy script now accepts `fadeSeconds` as well as `fadeDays`.
+- On-chain, "restricted" (stage 2) turns off `AI_SUBMIT` only; the demo UI also disables Approve while restricted.
+
 ## Single-user demo: validator, oracle, simulated mode (2026-09-26)
 
 - **Naming.** *Validator* = the human pressing Approve / Reject. *Oracle* = the server that generated the code

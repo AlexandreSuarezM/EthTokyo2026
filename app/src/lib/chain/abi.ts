@@ -3850,6 +3850,19 @@ export const penaltyLedgerAbi = [
   },
   {
     "type": "function",
+    "name": "JUDGE_ROLE",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "MINTER_ROLE",
     "inputs": [],
     "outputs": [
@@ -4119,6 +4132,61 @@ export const penaltyLedgerAbi = [
   },
   {
     "type": "function",
+    "name": "isBannedForever",
+    "inputs": [
+      {
+        "name": "human",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "judgeLift",
+    "inputs": [
+      {
+        "name": "human",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "reasonHash",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "ladder",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "banAtCount",
+        "type": "uint16",
+        "internalType": "uint16"
+      },
+      {
+        "name": "weightByCount",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "locked",
     "inputs": [
       {
@@ -4214,6 +4282,25 @@ export const penaltyLedgerAbi = [
       }
     ],
     "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "penaltyCount",
+    "inputs": [
+      {
+        "name": "human",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint16",
+        "internalType": "uint16"
+      }
+    ],
+    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -4511,6 +4598,31 @@ export const penaltyLedgerAbi = [
   },
   {
     "type": "function",
+    "name": "setLadder",
+    "inputs": [
+      {
+        "name": "l",
+        "type": "tuple",
+        "internalType": "struct PenaltyLedger.Ladder",
+        "components": [
+          {
+            "name": "banAtCount",
+            "type": "uint16",
+            "internalType": "uint16"
+          },
+          {
+            "name": "weightByCount",
+            "type": "bool",
+            "internalType": "bool"
+          }
+        ]
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "setPublisher",
     "inputs": [
       {
@@ -4754,6 +4866,31 @@ export const penaltyLedgerAbi = [
   },
   {
     "type": "event",
+    "name": "LadderSet",
+    "inputs": [
+      {
+        "name": "ladder",
+        "type": "tuple",
+        "indexed": false,
+        "internalType": "struct PenaltyLedger.Ladder",
+        "components": [
+          {
+            "name": "banAtCount",
+            "type": "uint16",
+            "internalType": "uint16"
+          },
+          {
+            "name": "weightByCount",
+            "type": "bool",
+            "internalType": "bool"
+          }
+        ]
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "Locked",
     "inputs": [
       {
@@ -4982,6 +5119,11 @@ export const penaltyLedgerAbi = [
   {
     "type": "error",
     "name": "BadConfig",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "BannedForever",
     "inputs": []
   },
   {

@@ -60,6 +60,7 @@ contract Deploy is Script {
         address attester;
         address feeTreasury;
         address oracle; //          0 unless the preset names one
+        address judge; //           0 unless the preset names one
     }
 
     error ZeroAttester();
@@ -147,6 +148,7 @@ contract Deploy is Script {
             );
         d.humans.setAttester(a.attester);
         a.oracle = _applyOracle(d, json, a.operator);
+        a.judge = _applyLadderAndJudge(d, json, a.operator);
 
         if (vm.keyExistsJson(json, ".fees.token")) d.feeToken = _applyFees(d, json, a.feeTreasury);
         _applyRepos(d, json);
@@ -162,7 +164,28 @@ contract Deploy is Script {
         d.receipts.grantRole(d.receipts.ORACLE_ROLE(), oracle);
     }
 
-    function _penaltyConfig(string memory json) internal pure returns (PenaltyLedger.Config memory) {
+    /// Optional count-based ladder ("penalties.banAtCount", "penalties.weightByCount") and judge
+    /// ("penalties.judge": "operator" or an address; JUDGE_ROLE may lift restrictions, never a ban).
+    function _applyLadderAndJudge(Deployment memory d, string memory json, address operator)
+        internal
+        returns (address judge)
+    {
+        if (vm.keyExistsJson(json, ".penalties.banAtCount")) {
+            d.ledger
+                .setLadder(
+                    PenaltyLedger.Ladder({
+                        banAtCount: uint16(vm.parseJsonUint(json, ".penalties.banAtCount")),
+                        weightByCount: vm.parseJsonBool(json, ".penalties.weightByCount")
+                    })
+                );
+        }
+        if (!vm.keyExistsJson(json, ".penalties.judge")) return address(0);
+        string memory j = vm.parseJsonString(json, ".penalties.judge");
+        judge = keccak256(bytes(j)) == keccak256("operator") ? operator : vm.parseAddress(j);
+        d.ledger.grantRole(d.ledger.JUDGE_ROLE(), judge);
+    }
+
+    function _penaltyConfig(string memory json) internal view returns (PenaltyLedger.Config memory) {
         return PenaltyLedger.Config({
             base: uint32(vm.parseJsonUint(json, ".penalties.base")),
             majorMultiplier: uint16(vm.parseJsonUint(json, ".penalties.majorMultiplier")),
@@ -170,7 +193,10 @@ contract Deploy is Script {
             maxScore: uint32(vm.parseJsonUint(json, ".penalties.maxScore")),
             stage2At: uint32(vm.parseJsonUint(json, ".penalties.stage2At")),
             stage3At: uint32(vm.parseJsonUint(json, ".penalties.stage3At")),
-            fadePeriod: uint64(vm.parseJsonUint(json, ".penalties.fadeDays") * 1 days)
+            // "fadeSeconds" (demo: minutes) or "fadeDays"
+            fadePeriod: vm.keyExistsJson(json, ".penalties.fadeSeconds")
+                ? uint64(vm.parseJsonUint(json, ".penalties.fadeSeconds"))
+                : uint64(vm.parseJsonUint(json, ".penalties.fadeDays") * 1 days)
         });
     }
 
@@ -255,6 +281,7 @@ contract Deploy is Script {
         vm.serializeAddress(o, "operator", a.operator);
         vm.serializeAddress(o, "attester", a.attester);
         vm.serializeAddress(o, "oracle", a.oracle);
+        vm.serializeAddress(o, "judge", a.judge);
         string memory out = vm.serializeString(o, "contracts", contracts);
 
         string memory path = string.concat(
@@ -269,6 +296,7 @@ contract Deploy is Script {
         console.log("admin             ", a.admin);
         console.log("attester          ", a.attester);
         console.log("oracle            ", a.oracle);
+        console.log("judge             ", a.judge);
         console.log("HumanRegistry     ", address(d.humans));
         console.log("PermissionRegistry", address(d.perms));
         console.log("ValidationReceipts", address(d.receipts));
