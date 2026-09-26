@@ -1,6 +1,6 @@
 "use client";
 
-import { CredentialRequest, IDKitRequestWidget, IDKitSessionWidget, proofOfHuman, type IDKitErrorCodes, type RpContext } from "@worldcoin/idkit";
+import { CredentialRequest, IDKitRequestWidget, IDKitSessionWidget, type IDKitErrorCodes, type RpContext } from "@worldcoin/idkit";
 import { useState } from "react";
 import type { DevResult } from "@/lib/dev/enroll";
 import { enrollSignal } from "@/lib/world/identity";
@@ -92,7 +92,9 @@ export default function DevEnroll({ appId, environment, account }: Props) {
           rp_context={enrollRp.rp_context}
           allow_legacy_proofs={false}
           environment={environment}
-          preset={proofOfHuman({ signal: enrollSignal(account) })}
+          // World ID 4.0 only. The proofOfHuman() preset adds a legacy (3.0) Orb fallback, and a 3.0
+          // nullifier differs from the 4.0 one for the same person: one protocol version per action.
+          constraints={CredentialRequest("proof_of_human", { signal: enrollSignal(account) })}
           handleVerify={async (result) => {
             const r = await post<DevResult>("/api/dev/enroll/start", { account, result });
             check(r);

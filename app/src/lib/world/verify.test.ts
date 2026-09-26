@@ -30,15 +30,44 @@ describe("client payload parsing", () => {
     expect(parseClientResult(uniquenessSchema, good).action).toBe(ENROLL_ACTION);
   });
 
-  it("rejects legacy 3.0 proofs, unknown fields and missing signal hashes", () => {
+  it("accepts extra fields World App adds and keeps them, so the result is forwarded unchanged", () => {
+    const withExtra = { ...good, nonce: "0xabc", integrity_bundle: { v: 1 }, responses: [{ ...good.responses[0], merkle_root: "0x01" }] };
+    expect(parseClientResult(uniquenessSchema, withExtra)).toEqual(withExtra);
+  });
+
+  it("fails closed when a field we rely on is missing or malformed", () => {
+    const item = good.responses[0];
     const bad = [
-      { ...good, protocol_version: "3.0" },
-      { ...good, extra: 1 },
-      { ...good, responses: [{ ...good.responses[0], signal_hash: undefined }] },
-      { ...good, responses: [good.responses[0], good.responses[0]] },
+      { ...good, action: undefined },
+      { ...good, environment: undefined },
       { ...good, environment: "sandbox" },
+      { ...good, responses: [{ ...item, signal_hash: undefined }] },
+      { ...good, responses: [{ ...item, nullifier: undefined }] },
+      { ...good, responses: [{ ...item, issuer_schema_id: undefined }] },
+      { ...good, responses: [item, item] },
+      { ...good, protocol_version: undefined },
     ];
     for (const b of bad) expect(() => parseClientResult(uniquenessSchema, b)).toThrow(WorldError);
+  });
+
+  it("refuses a legacy 3.0 proof with a specific error (one protocol version per action: 4.0)", () => {
+    // Exactly the shape World App returned in the smoke test (legacy Orb fallback).
+    const legacy = {
+      protocol_version: "3.0",
+      nonce: "0x01",
+      action: ENROLL_ACTION,
+      environment: "production",
+      integrity_bundle: {},
+      responses: [{ identifier: "orb", signal_hash: "0x02", proof: "0x03", merkle_root: "0x04", nullifier: "0x05" }],
+    };
+    let e: unknown;
+    try {
+      parseClientResult(uniquenessSchema, legacy);
+    } catch (err) {
+      e = err;
+    }
+    expect(e).toMatchObject({ code: "unavailable_credential", worldCode: "protocol_version 3.0 (only 4.0 accepted)" });
+    expect(() => parseClientResult(sessionSchema, { ...legacy, session_id: "session_x" })).toThrow(/World ID 3.0/);
   });
 
   it("requires a well-formed session id on session results", () => {
@@ -49,13 +78,20 @@ describe("client payload parsing", () => {
 });
 
 describe("verifyUniqueness", () => {
-  it("returns the nullifier (decimal) and level, pinning the environment", async () => {
-    const result = uniquenessResult({ account, nullifier: "0xff" });
+  it("returns the nullifier (decimal) and level, forwarding the result to World unchanged", async () => {
+    const result = { ...uniquenessResult({ account, nullifier: "0xff" }), integrity_bundle: { v: 2 } };
     const world = worldAccepts();
-    const v = await verifyUniqueness({ ...result, environment: "staging" }, ENROLL_ACTION, opts(world.fetch));
+    const v = await verifyUniqueness(result, ENROLL_ACTION, opts(world.fetch));
     expect(v).toMatchObject({ nullifier: "255", level: 1, sybilScore: null });
     expect(world.calls[0].url).toBe(`${VERIFY_URL}/rp_test`);
-    expect(world.calls[0].body.environment).toBe("production"); // not the client's "staging"
+    expect(world.calls[0].body).toEqual(result);
+  });
+
+  it("refuses a result from another environment instead of rewriting it, without calling World", async () => {
+    const world = worldAccepts();
+    const staging = { ...uniquenessResult({ account }), environment: "staging" as const };
+    expect(await codeOf(verifyUniqueness(staging, ENROLL_ACTION, opts(world.fetch)))).toBe("rejected");
+    expect(world.calls).toHaveLength(0);
   });
 
   it("maps Selfie Check to level 2 and keeps the sybil score", async () => {
@@ -82,7 +118,7 @@ describe("verifyUniqueness", () => {
     const ok = worldOk(result);
     const cases: [string, Parameters<typeof mockFetch>[0], string][] = [
       ["wrong environment", { body: { ...ok, environment: "staging" } }, "rejected"],
-      ["unexpected field", { body: { ...ok, surprise: true } }, "verification_unavailable"],
+      ["extra field is fine, but a missing environment is not", { body: { ...ok, surprise: true, environment: undefined } }, "verification_unavailable"],
       ["missing nullifier", { body: { ...ok, nullifier: undefined } }, "verification_unavailable"],
       ["missing results", { body: { ...ok, results: [] } }, "verification_unavailable"],
       ["success not true", { body: { ...ok, success: false } }, "verification_unavailable"],
@@ -144,20 +180,20 @@ describe("World's own error code (for dev pages)", () => {
     expect((await errOf(verifyUniqueness(r, ENROLL_ACTION, opts(failed.fetch)))).worldCode).toBe("HTTP 400 verification_failed");
   });
 
-  it("names unexpected fields in World's answer and in the client result", async () => {
+  it("names missing fields in World's answer and in the client result, never values", async () => {
     const r = uniquenessResult({ account });
-    const extra = mockFetch({ body: { ...worldOk(r), surprise: 1 } });
-    const e = await errOf(verifyUniqueness(r, ENROLL_ACTION, opts(extra.fetch)));
-    expect(e.worldCode).toBe("unexpected fields: surprise");
+    const missing = mockFetch({ body: { ...worldOk(r), environment: undefined } });
+    const e = await errOf(verifyUniqueness(r, ENROLL_ACTION, opts(missing.fetch)));
+    expect(e.worldCode).toBe("unexpected fields: environment");
     expect(e.worldCode).not.toContain(r.responses[0].nullifier);
 
     const client = (() => {
       try {
-        parseClientResult(uniquenessSchema, { ...r, surprise: 1 });
+        parseClientResult(uniquenessSchema, { ...r, responses: [{ ...r.responses[0], nullifier: undefined }] });
       } catch (err) {
         return err as WorldError;
       }
     })();
-    expect(client?.worldCode).toBe("result fields: extra surprise");
+    expect(client?.worldCode).toBe("result fields: responses.0.nullifier");
   });
 });

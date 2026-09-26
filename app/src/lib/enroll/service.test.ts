@@ -133,7 +133,7 @@ describe("enrollment", () => {
       expect(await codeOf(startEnrollment(h.deps, { account, result: uniquenessResult({ account }), extra: 1 }))).toBe(
         "invalid_request",
       );
-      expect(await codeOf(startEnrollment(h.deps, { account, result: { protocol_version: "3.0" } }))).toBe("invalid_request");
+      expect(await codeOf(startEnrollment(h.deps, { account, result: { protocol_version: "3.0" } }))).toBe("unavailable_credential");
     });
 
     it("refuses a human or a wallet already enrolled on-chain", async () => {

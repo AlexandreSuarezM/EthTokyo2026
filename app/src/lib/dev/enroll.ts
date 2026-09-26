@@ -63,3 +63,21 @@ export async function runDev(step: "start" | "complete", deps: EnrollDeps, body:
     return { ok: false, error: "unexpected", message: e instanceof Error ? e.name : "unknown", worldCode: null };
   }
 }
+
+/** Field names (and a few non-secret scalars) of what the browser sent, for dev logs. Never proofs or nullifiers. */
+export function shapeOf(body: unknown) {
+  const b = (body ?? {}) as Record<string, unknown>;
+  const r = (b.result ?? {}) as Record<string, unknown>;
+  const item = (Array.isArray(r.responses) ? r.responses[0] : {}) as Record<string, unknown>;
+  return {
+    body: Object.keys(b),
+    result: Object.keys(r),
+    protocol_version: r.protocol_version,
+    action: r.action,
+    environment: r.environment,
+    responses: Array.isArray(r.responses) ? r.responses.length : typeof r.responses,
+    item: Object.keys(item ?? {}),
+    identifier: item?.identifier,
+    issuer_schema_id: item?.issuer_schema_id,
+  };
+}

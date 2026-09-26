@@ -1,0 +1,76 @@
+{
+  "name": "team-default",
+  "description": "Product team. Self-validation allowed (your rulebook). Critical repos need two receipts. No live proof (future work). Penalties: 100 per mistake, +100% of current score, cap 1000, no AI at 200, banned at 500, fades 100 points per 30 days.",
+  "policy": {
+    "liveProofTier": 4,
+    "allowSelfApproval": true,
+    "flagCooldownDays": 1,
+    "flagStrikeWindowDays": 90,
+    "baselessFlagLimit": 3,
+    "maxTierForSelfie": 1
+  },
+  "receipts": {
+    "liabilityWindowDays": 30,
+    "appealWindowDays": 3,
+    "attester": null
+  },
+  "penalties": {
+    "base": 100,
+    "majorMultiplier": 2,
+    "escalationPct": 100,
+    "maxScore": 1000,
+    "stage2At": 200,
+    "stage3At": 500,
+    "fadeDays": 30
+  },
+  "repos": [
+    {
+      "id": "acme/docs",
+      "tier": 0,
+      "requiredApprovals": 1
+    },
+    {
+      "id": "acme/web",
+      "tier": 1,
+      "requiredApprovals": 1
+    },
+    {
+      "id": "acme/payments",
+      "tier": 2,
+      "requiredApprovals": 2
+    }
+  ],
+  "presets": {
+    "coder": {
+      "durationDays": 90,
+      "grants": {
+        "AI_SUBMIT": 20,
+        "REPO_TIER": 1,
+        "APPROVE_DEPTH": 150,
+        "FLAG": 1
+      }
+    },
+    "reviewer": {
+      "durationDays": 90,
+      "grants": {
+        "AI_SUBMIT": 20,
+        "REPO_TIER": 2,
+        "APPROVE_DEPTH": 400,
+        "FLAG": 1
+      }
+    },
+    "lead": {
+      "durationDays": 180,
+      "grants": {
+        "AI_SUBMIT": 40,
+        "REPO_TIER": 3,
+        "APPROVE_DEPTH": 2000,
+        "SOLO_APPROVE": 1,
+        "MERGE_PROTECTED": 1,
+        "GRANT": 1,
+        "FLAG": 1
+      }
+    }
+  },
+  "fees": null
+}
