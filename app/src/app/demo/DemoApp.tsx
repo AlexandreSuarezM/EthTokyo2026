@@ -4,6 +4,7 @@ import { CredentialRequest, IDKitRequestWidget, IDKitSessionWidget, type IDKitEr
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPublicClient, createWalletClient, custom, formatEther, type Address, type Hex } from "viem";
 import { sepolia } from "viem/chains";
+import NetworkBackground from "./NetworkBackground";
 import { bountyAbi, humanRegistryAbi } from "@/lib/chain/abi";
 import { APPROVAL_TYPES } from "@/lib/chain/types";
 import { enrollSignal } from "@/lib/world/identity";
@@ -78,28 +79,25 @@ const mmss = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, 
 const LEVEL = { 1: "Orb (Proof of Human)", 2: "Selfie Check", 3: "SIMULATED (no World proof)" } as Record<number, string>;
 
 const C = {
-  green: "#1a7f37",
-  red: "#cf222e",
-  yellow: "#bf8700",
-  grey: "#8c959f",
-  card: { border: "1px solid #d0d7de", borderRadius: 10, padding: 16, background: "var(--background, #fff)" } as const,
+  green: "#34d399",
+  red: "#fb7185",
+  yellow: "#fbbf24",
+  grey: "#64748b",
 };
 
+/** Themed button (demo.css): the colour picks the variant; the glow follows the cursor. */
 function Btn(props: { color: string; disabled?: boolean; onClick: () => void; children: React.ReactNode; big?: boolean }) {
+  const variant =
+    props.color === C.green ? "hx-approve" : props.color === C.red ? "hx-report" : props.color === C.grey ? "hx-skip" : props.color === "#bf8700" ? "hx-gold" : "";
   return (
     <button
       disabled={props.disabled}
       onClick={props.onClick}
-      style={{
-        background: props.disabled ? C.grey : props.color,
-        color: "#fff",
-        border: 0,
-        borderRadius: 8,
-        padding: props.big ? "12px 22px" : "8px 14px",
-        fontSize: props.big ? 17 : 14,
-        fontWeight: 600,
-        cursor: props.disabled ? "not-allowed" : "pointer",
-        marginRight: 8,
+      className={`hx-btn ${props.big ? "hx-lg" : "hx-sm"} ${variant}`}
+      onMouseMove={(e) => {
+        const r = e.currentTarget.getBoundingClientRect();
+        e.currentTarget.style.setProperty("--mx", `${e.clientX - r.left}px`);
+        e.currentTarget.style.setProperty("--my", `${e.clientY - r.top}px`);
       }}
     >
       {props.children}
@@ -332,19 +330,20 @@ export default function DemoApp({ config, appId }: { config: Config; appId: `app
   const canUse = !!account && s?.enrolled && status === "active" && !busy;
 
   return (
-    <main style={{ maxWidth: 1200, margin: "24px auto", padding: "0 16px", fontFamily: "system-ui, sans-serif", lineHeight: 1.45 }}>
+    <main className="hitl-root" style={{ maxWidth: 1200, margin: "24px auto", padding: "0 16px", lineHeight: 1.45 }}>
+      <NetworkBackground />
       <header style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
         <h1 style={{ fontSize: 24, margin: 0 }}>Human-in-the-loop accountability for AI code</h1>
         {config.mode === "simulated" && (
-          <span style={{ background: "#fff8c5", border: `1px solid ${C.yellow}`, color: "#7d4e00", borderRadius: 20, padding: "2px 10px", fontSize: 13, fontWeight: 600 }}>
+          <span className="hx-badge">
             World ID: simulated
           </span>
         )}
-        <span style={{ fontSize: 13, color: "#57606a" }}>Sepolia · judge {config.judge ? link("address", config.judge) : "?"}</span>
+        <span style={{ fontSize: 13, color: "var(--muted)" }}>Sepolia · judge {config.judge ? link("address", config.judge) : "?"}</span>
       </header>
 
       {(busy || error || notice) && (
-        <div style={{ ...C.card, marginBottom: 16, borderColor: error ? C.red : busy ? C.yellow : C.green }}>
+        <div className="hx-glass" style={{ marginBottom: 16, borderColor: error ? C.red : busy ? C.yellow : C.green }}>
           {busy && <span>⏳ {busy}</span>}
           {error && <span style={{ color: C.red }}>✗ {error}</span>}
           {notice && !busy && <span style={{ color: C.green }}>{notice}</span>}
@@ -353,7 +352,7 @@ export default function DemoApp({ config, appId }: { config: Config; appId: `app
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1.6fr 1.1fr", gap: 16, alignItems: "start" }}>
         {/* ---------------------------------------------------------------- 1. Sign in */}
-        <section style={C.card}>
+        <section className="hx-glass">
           <h2 style={{ fontSize: 17, marginTop: 0 }}>1. Sign in</h2>
           {!account ? (
             <Btn color="#0969da" onClick={connect} disabled={!!busy}>Connect MetaMask</Btn>
@@ -368,13 +367,13 @@ export default function DemoApp({ config, appId }: { config: Config; appId: `app
           )}
           {s?.enrolled && (
             <p style={{ color: C.green, fontWeight: 600 }}>
-              Enrolled ✓ <span style={{ fontWeight: 400, color: "#57606a", fontSize: 13 }}>credential: {LEVEL[s.level] ?? s.level}</span>
+              Enrolled ✓ <span style={{ fontWeight: 400, color: "var(--muted)", fontSize: 13 }}>credential: {LEVEL[s.level] ?? s.level}</span>
             </p>
           )}
         </section>
 
         {/* ---------------------------------------------------------------- 2. AI answer */}
-        <section style={C.card}>
+        <section className="hx-glass">
           <h2 style={{ fontSize: 17, marginTop: 0 }}>2. AI answer</h2>
           {status === "banned" ? (
             <p style={{ color: C.red, fontWeight: 700, fontSize: 18 }}>⛔ Repo access closed. Asking and approving are permanently disabled.</p>
@@ -386,14 +385,14 @@ export default function DemoApp({ config, appId }: { config: Config; appId: `app
           )}
           {answer && (
             <div style={{ marginTop: 14 }}>
-              <div style={{ fontSize: 13, color: "#57606a", marginBottom: 6 }}>
+              <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 6 }}>
                 Round {answer.round} · {answer.task} · commit {short(answer.commitHash, 8)}
               </div>
               <pre style={{ background: "#0d1117", color: "#e6edf3", padding: 14, borderRadius: 8, fontSize: 15, overflowX: "auto" }}>{answer.code}</pre>
               <Btn big color={C.green} onClick={approve} disabled={!canUse}>✓ Approve</Btn>
               <Btn big color={C.red} onClick={reject} disabled={!canUse}>✗ Report</Btn>
               <Btn big color={C.grey} onClick={ask} disabled={!canUse}>⏭ Skip</Btn>
-              <div style={{ fontSize: 12, color: "#57606a", marginTop: 8 }}>
+              <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 8 }}>
                 Approve or Report: each review earns +1 reward token (at most one per 30 s). Approving code that fails loses all your tokens. Skip does nothing. The verdict is sealed before you decide.
               </div>
             </div>
@@ -405,7 +404,7 @@ export default function DemoApp({ config, appId }: { config: Config; appId: `app
                 Fingerprint matches ✓ <code>hash(code, &quot;{lastJudge.verdict}&quot;, salt {short(lastJudge.salt)}) = {short(lastJudge.commitment)}</code> = contextHash on-chain
               </div>
               {lastJudge.token && (
-                <div style={{ fontSize: 14, marginTop: 4, color: lastJudge.token.awarded ? C.green : "#57606a" }}>
+                <div style={{ fontSize: 14, marginTop: 4, color: lastJudge.token.awarded ? C.green : "var(--muted)" }}>
                   ★ {lastJudge.token.note} {lastJudge.token.txHash && link("tx", lastJudge.token.txHash, "tx")}
                 </div>
               )}
@@ -422,7 +421,7 @@ export default function DemoApp({ config, appId }: { config: Config; appId: `app
         </section>
 
         {/* ---------------------------------------------------------------- Your standing */}
-        <section style={C.card}>
+        <section className="hx-glass">
           <h2 style={{ fontSize: 17, marginTop: 0 }}>Your standing</h2>
           {!s?.enrolled ? (
             <p style={{ color: C.grey }}>Connect and enroll to see your standing.</p>
@@ -438,7 +437,7 @@ export default function DemoApp({ config, appId }: { config: Config; appId: `app
                   <div style={{ fontSize: 14, margin: "4px 0 8px", color: tokenCountdown > 0 ? C.yellow : C.green }}>
                     {tokenCountdown > 0 ? `Next token in ${mmss(tokenCountdown)}` : "Your next review can earn a token"}
                   </div>
-                  <div style={{ fontSize: 13, color: "#57606a" }}>
+                  <div style={{ fontSize: 13, color: "var(--muted)" }}>
                     Bounty {config.explorer && link("address", s.rewards.bounty, "contract")} · challenge code{" "}
                     <a href={s.rewards.codeURI} target="_blank" rel="noreferrer">
                       link ↗
@@ -458,7 +457,7 @@ export default function DemoApp({ config, appId }: { config: Config; appId: `app
                     </Btn>
                   )}
                   {s.rewards.claimed && <div style={{ color: C.green, marginTop: 6 }}>Prize share claimed ✓</div>}
-                  <div style={{ fontSize: 12, color: "#57606a", marginTop: 8 }}>
+                  <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 8 }}>
                     Tokens are soulbound. Every review earns one (at most one per {s.rewards.cooldown} s); approving code that fails loses them
                     all. Once qualified, your prize share is kept.
                   </div>
@@ -470,14 +469,14 @@ export default function DemoApp({ config, appId }: { config: Config; appId: `app
       </div>
 
       {/* ---------------------------------------------------------------- Receipts */}
-      <section style={{ ...C.card, marginTop: 16 }}>
+      <section className="hx-glass" style={{ marginTop: 16 }}>
         <h2 style={{ fontSize: 17, marginTop: 0 }}>Receipts</h2>
         {!s?.receipts.length ? (
           <p style={{ color: C.grey }}>No receipts yet. Approving a code sample records a receipt on Sepolia.</p>
         ) : (
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
             <thead>
-              <tr style={{ textAlign: "left", color: "#57606a" }}>
+              <tr style={{ textAlign: "left", color: "var(--muted)" }}>
                 <th>Receipt</th>
                 <th>Recorded</th>
                 <th>Transaction</th>
@@ -486,13 +485,13 @@ export default function DemoApp({ config, appId }: { config: Config; appId: `app
             </thead>
             <tbody>
               {s.receipts.map((r) => (
-                <tr key={r.receiptId} style={{ borderTop: "1px solid #eaeef2" }}>
+                <tr key={r.receiptId} style={{ borderTop: "1px solid rgba(148, 163, 184, 0.15)" }}>
                   <td>#{r.receiptId}</td>
                   <td>{new Date(r.createdAt * 1000).toLocaleTimeString()}</td>
                   <td>{link("tx", r.txHash)}</td>
                   <td>
                     {!r.judged ? (
-                      <Btn color="#57606a" disabled={!!busy} onClick={() => run("Running the judge…", () => runJudge(r.receiptId))}>
+                      <Btn color="var(--muted)" disabled={!!busy} onClick={() => run("Running the judge…", () => runJudge(r.receiptId))}>
                         Run judge
                       </Btn>
                     ) : r.judged.verdict === "right" ? (

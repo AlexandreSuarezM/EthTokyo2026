@@ -1,0 +1,247 @@
+/* /demo visual theme: dark navy → violet, cyan glow, glass panels, hex motifs. Styles only. */
+
+:root {
+  --hx-bg-1: #050816;
+  --hx-bg-2: #0b1033;
+  --hx-bg-3: #1c0f3f;
+  --hx-cyan: #22e3ff;
+  --hx-blue: #2f7bff;
+  --hx-violet: #8b5cf6;
+  --hx-text: #e6f1ff;
+  --muted: #9fb3d1;
+  --hx-glass: rgba(18, 26, 64, 0.55);
+  --hx-glass-border: rgba(34, 227, 255, 0.22);
+}
+
+html,
+body {
+  background: radial-gradient(1200px 700px at 15% -10%, #16215e 0%, transparent 60%),
+    radial-gradient(900px 600px at 110% 10%, #3a1a78 0%, transparent 55%),
+    linear-gradient(160deg, var(--hx-bg-1) 0%, var(--hx-bg-2) 45%, var(--hx-bg-3) 100%);
+  background-attachment: fixed;
+  color: var(--hx-text);
+}
+
+/* hexagon grid, very faint */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.07;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='98' viewBox='0 0 56 98'%3E%3Cpath d='M28 66L0 50L0 16L28 0L56 16L56 50L28 66L28 98' fill='none' stroke='%2322e3ff' stroke-width='1'/%3E%3Cpath d='M28 0L28 -32' fill='none' stroke='%2322e3ff' stroke-width='1'/%3E%3C/svg%3E");
+  background-size: 56px 98px;
+}
+
+.hitl-root {
+  position: relative;
+  z-index: 1;
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  letter-spacing: 0.01em;
+}
+
+.hitl-root h1 {
+  background: linear-gradient(90deg, #ffffff 0%, var(--hx-cyan) 55%, var(--hx-violet) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: 0 0 28px rgba(34, 227, 255, 0.18);
+}
+
+.hitl-root h2 {
+  color: #cfe9ff;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: 14px !important;
+}
+
+.hitl-root a {
+  color: var(--hx-cyan);
+  text-decoration: none;
+  border-bottom: 1px dashed rgba(34, 227, 255, 0.4);
+  transition: color 0.2s, border-color 0.2s, text-shadow 0.2s;
+}
+.hitl-root a:hover {
+  color: #fff;
+  border-color: #fff;
+  text-shadow: 0 0 10px rgba(34, 227, 255, 0.8);
+}
+
+.hitl-root code {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  color: #a5f3fc;
+}
+
+.hitl-root pre {
+  background: rgba(3, 6, 20, 0.85) !important;
+  border: 1px solid rgba(34, 227, 255, 0.25);
+  box-shadow: inset 0 0 30px rgba(34, 227, 255, 0.06), 0 0 24px rgba(139, 92, 246, 0.12);
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+/* glass panels */
+.hx-glass {
+  position: relative;
+  background: var(--hx-glass);
+  border: 1px solid var(--hx-glass-border);
+  border-radius: 16px;
+  padding: 18px;
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  transition: border-color 0.3s, box-shadow 0.3s, transform 0.3s;
+}
+.hx-glass:hover {
+  border-color: rgba(34, 227, 255, 0.45);
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.4), 0 0 26px rgba(34, 227, 255, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+/* node connector dots on the panel corners */
+.hx-glass::before,
+.hx-glass::after {
+  content: "";
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--hx-cyan);
+  box-shadow: 0 0 10px var(--hx-cyan);
+  opacity: 0.8;
+}
+.hx-glass::before {
+  top: -4px;
+  left: 22px;
+}
+.hx-glass::after {
+  bottom: -4px;
+  right: 22px;
+  background: var(--hx-violet);
+  box-shadow: 0 0 10px var(--hx-violet);
+}
+
+/* buttons: pill, gradient, glow follows the cursor, hover lift, click pulse */
+.hx-btn {
+  --mx: 50%;
+  --my: 50%;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  color: #fff;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+  margin: 4px 8px 4px 0;
+  cursor: pointer;
+  background: linear-gradient(120deg, var(--hx-cyan) 0%, var(--hx-blue) 50%, var(--hx-violet) 100%);
+  box-shadow: 0 0 0 0 rgba(34, 227, 255, 0), 0 6px 18px rgba(47, 123, 255, 0.25);
+  transition: transform 0.18s ease, box-shadow 0.25s ease, filter 0.25s ease, opacity 0.2s;
+}
+.hx-btn::before {
+  /* cursor-following highlight */
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(120px circle at var(--mx) var(--my), rgba(255, 255, 255, 0.35), transparent 60%);
+  opacity: 0;
+  transition: opacity 0.25s;
+  pointer-events: none;
+}
+.hx-btn::after {
+  /* Ethereum diamond accent on hover */
+  content: "";
+  display: inline-block;
+  width: 0;
+  height: 14px;
+  margin-left: 0;
+  vertical-align: -2px;
+  opacity: 0;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 16'%3E%3Cpath d='M5 0L0 8.2 5 11 10 8.2z' fill='white' opacity='.95'/%3E%3Cpath d='M5 12L0 9.2 5 16 10 9.2z' fill='white' opacity='.7'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+  transition: width 0.2s, margin 0.2s, opacity 0.2s;
+}
+.hx-btn:not(:disabled):hover {
+  transform: translateY(-1px) scale(1.04);
+  filter: brightness(1.08) saturate(1.1);
+  box-shadow: 0 0 0 1px rgba(34, 227, 255, 0.55), 0 0 22px rgba(34, 227, 255, 0.45), 0 10px 28px rgba(139, 92, 246, 0.35);
+}
+.hx-btn:not(:disabled):hover::before {
+  opacity: 1;
+}
+.hx-btn:not(:disabled):hover::after {
+  width: 9px;
+  margin-left: 8px;
+  opacity: 1;
+}
+.hx-btn:not(:disabled):active {
+  transform: scale(0.98);
+  animation: hx-pulse 0.45s ease-out;
+}
+@keyframes hx-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(34, 227, 255, 0.7);
+  }
+  100% {
+    box-shadow: 0 0 0 18px rgba(34, 227, 255, 0);
+  }
+}
+.hx-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.38;
+  filter: grayscale(0.6);
+  box-shadow: none;
+}
+.hx-btn.hx-sm {
+  padding: 8px 16px;
+  font-size: 14px;
+}
+.hx-btn.hx-lg {
+  padding: 12px 24px;
+  font-size: 17px;
+}
+/* decision buttons keep their meaning: approve = green, report = red, skip = neutral */
+.hx-btn.hx-approve {
+  background: linear-gradient(120deg, #22e3a0 0%, #10b981 55%, #0ea5a4 100%);
+}
+.hx-btn.hx-report {
+  background: linear-gradient(120deg, #ff5f8f 0%, #ef4444 55%, #b91c5c 100%);
+}
+.hx-btn.hx-skip {
+  background: linear-gradient(120deg, rgba(148, 163, 184, 0.35), rgba(71, 85, 105, 0.55));
+}
+.hx-btn.hx-gold {
+  background: linear-gradient(120deg, #fde047 0%, #f59e0b 55%, #d97706 100%);
+  color: #1a1204;
+  text-shadow: none;
+}
+
+.hx-badge {
+  border-radius: 999px;
+  padding: 3px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  background: rgba(250, 204, 21, 0.12);
+  border: 1px solid rgba(250, 204, 21, 0.6);
+  color: #fde68a;
+  box-shadow: 0 0 14px rgba(250, 204, 21, 0.25);
+}
+
+.hitl-root table th {
+  font-weight: 600;
+  color: var(--muted);
+  padding: 6px 4px;
+}
+.hitl-root table td {
+  padding: 8px 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hx-btn,
+  .hx-glass {
+    transition: none;
+  }
+  .hx-btn:not(:disabled):active {
+    animation: none;
+  }
+}
