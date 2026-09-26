@@ -17,3 +17,5 @@ Add diferent accountability scores team oriented.
 Link etherscan verification of the transaction on the submision of bounty and the recivieng of rewards . 
 
 Get a database that biject alfanumberical codes to ia generated codes 
+
+Improve from local to main  and sepolia to eth eventually 
