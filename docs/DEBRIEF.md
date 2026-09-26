@@ -45,4 +45,16 @@
   authenticated MCP tool opens a 24h staging window per app and issues a one-time token. We build production-only
   for now, so the simulator can't give us extra test humans.
 
+- **2026-09-26 — First real World ID test (smoke test, /dev/enroll): no first success yet.**
+  1. With the `proofOfHuman()` preset and `allow_legacy_proofs: false`, World App (bridge / QR flow) answered with a
+     **legacy 3.0** proof (`identifier: "orb"`, `merkle_root`, single-string `proof`). The credentials page says the
+     preset "also includes legacy Orb fallback for users without a World ID 4.0 proof", so `allow_legacy_proofs:
+     false` did not stop the fallback in this flow. Our strict schema then rejected it before calling World.
+  2. Requesting 4.0 only (`CredentialRequest("proof_of_human")`, no fallback): World App returned
+     **`credential_unavailable`**. Our tester's Orb-verified World ID has no World ID 4.0 Proof of Human credential.
+  - Missing docs: what `credential_unavailable` means for an Orb-verified user, and how an existing (3.0) Orb user
+    gets the 4.0 credential. Nothing we read explains it, yet sessions (4.0 only) are the documented way to link
+    later proofs to an account, so a 3.0-only user can't use a session-based app at all.
+  - Time spent so far: about 1.5 h from the first scan to this diagnosis. Time to first success: not reached yet.
+
 ## What worked well
