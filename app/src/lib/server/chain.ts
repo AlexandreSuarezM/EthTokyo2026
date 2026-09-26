@@ -34,5 +34,5 @@ export function chainServices() {
   const wallet = createWalletClient({ account: privateKeyToAccount(env.RELAYER_PRIVATE_KEY), chain, transport });
   const relayer = createRelayer({ wallet, publicClient, receipts: cfg.contracts.ValidationReceipts });
 
-  return { config: cfg, attester, relayer, publicClient };
+  return { config: cfg, attester, relayer, publicClient, relayerWallet: wallet, chain, transport };
 }

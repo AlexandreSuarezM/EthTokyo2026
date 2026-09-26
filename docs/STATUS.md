@@ -31,6 +31,10 @@ Our own cut-off: **submit before Saturday 24:00 (Sunday 00:00) Madrid**, leaving
   green. Keys rotated (old ones were exposed).
 - 14:25 Step 1 (deploy): demo preset on Sepolia, `config/11155111.json`; roles verified on-chain (oracle + judge =
   relayer `0x99fa…8328`, minter = receipts, attester set, ladder 3/true, fade 300 s, appeal 0, liability 365 d).
+- 14:45 Steps 2–5 (+6 by script): `/demo` page (sign in, AI answer, standing, receipts), fake AI from files, reject =
+  new round, approve → receipt, judge reveal + fingerprint + mint, countdown, judge lift. Full ladder run on Sepolia
+  through the API with a throwaway wallet: token 1 (297 s) → lift → 2× Good decision → token 2 (597 s) → lift →
+  token 3 → banned; lift and ask refused when banned. 150 app tests green. Clips: user to record with MetaMask.
 
 ## Order for the rest of Saturday (superseded by docs/DEMO_PLAN.md)
 

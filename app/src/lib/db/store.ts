@@ -84,6 +84,18 @@ export type ApprovalRecord = {
   createdAt: number;
 };
 
+/** Demo only: one fake-AI answer. `verdict` and `salt` never leave the server before the judge runs. */
+export type DemoAnswer = { id: string; code: string; variant: string; verdict: "right" | "wrong"; salt: `0x${string}`; createdAt: number };
+
+/** Demo only: the judge's ruling on one receipt (claimed once, then completed). */
+export type DemoJudgment = {
+  receiptId: string;
+  verdict: "right" | "wrong";
+  tokenId: string | null;
+  txHash: `0x${string}` | null;
+  createdAt: number;
+};
+
 export interface Store {
   /** Records (action, nullifier) once. Returns false if it was already used. */
   recordNullifier(action: string, nullifier: string | bigint, humanId?: `0x${string}`): Promise<boolean>;
@@ -113,6 +125,18 @@ export interface Store {
   takePendingApproval(id: string): Promise<PendingApproval | null>;
   saveReceipt(r: Omit<ApprovalRecord, "createdAt">): Promise<boolean>;
   receiptOf(approvalKey: string): Promise<ApprovalRecord | null>;
+  receiptById(receiptId: string): Promise<ApprovalRecord | null>;
+  receiptsOfHuman(humanId: `0x${string}`): Promise<ApprovalRecord[]>;
+  saveDemoAnswer(a: Omit<DemoAnswer, "createdAt">): Promise<boolean>;
+  getDemoAnswer(id: string): Promise<DemoAnswer | null>;
+  /** Claims the judgment of a receipt once; false if it was already claimed. */
+  claimJudgment(receiptId: string, verdict: "right" | "wrong"): Promise<boolean>;
+  completeJudgment(receiptId: string, tokenId: string, txHash: `0x${string}`): Promise<void>;
+  releaseJudgment(receiptId: string): Promise<void>;
+  getJudgment(receiptId: string): Promise<DemoJudgment | null>;
+  /** Demo: the judge's lifts, recorded when sent (free-tier RPCs can't scan event logs). */
+  recordLift(humanId: `0x${string}`, txHash: `0x${string}`): Promise<void>;
+  liftsOf(humanId: `0x${string}`): Promise<{ at: number; txHash: `0x${string}` }[]>;
   close(): Promise<void>;
 }
 
@@ -183,6 +207,23 @@ const SCHEMA = [
      human_id TEXT NOT NULL,
      proof_ref TEXT NOT NULL,
      world_result TEXT NOT NULL,
+     created_at BIGINT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS demo_answers (
+     id TEXT PRIMARY KEY,
+     code TEXT NOT NULL,
+     variant TEXT NOT NULL,
+     verdict TEXT NOT NULL,
+     salt TEXT NOT NULL,
+     created_at BIGINT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS demo_lifts (
+     tx_hash TEXT PRIMARY KEY,
+     human_id TEXT NOT NULL,
+     created_at BIGINT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS demo_judgments (
+     receipt_id TEXT PRIMARY KEY,
+     verdict TEXT NOT NULL,
+     token_id TEXT,
+     tx_hash TEXT,
      created_at BIGINT NOT NULL)`,
 ];
 
@@ -375,6 +416,73 @@ export async function createStore(driver: Driver): Promise<Store> {
       ),
 
     receiptOf: async (key) => toApprovalRecord((await driver.query("SELECT * FROM receipts WHERE approval_key = ?", [key]))[0]),
+
+    receiptById: async (id) => toApprovalRecord((await driver.query("SELECT * FROM receipts WHERE receipt_id = ?", [id]))[0]),
+
+    receiptsOfHuman: async (humanId) =>
+      (await driver.query("SELECT * FROM receipts WHERE human_id = ? ORDER BY created_at DESC", [humanId.toLowerCase()])).map(
+        (r) => toApprovalRecord(r)!,
+      ),
+
+    saveDemoAnswer: async (a) =>
+      insertOnce("INSERT INTO demo_answers (id, code, variant, verdict, salt, created_at) VALUES (?, ?, ?, ?, ?, ?)", [
+        a.id,
+        a.code,
+        a.variant,
+        a.verdict,
+        a.salt,
+        now(),
+      ]),
+
+    getDemoAnswer: async (id) => {
+      const r = (await driver.query("SELECT * FROM demo_answers WHERE id = ?", [id]))[0];
+      if (!r) return null;
+      return {
+        id: String(r.id),
+        code: String(r.code),
+        variant: String(r.variant),
+        verdict: String(r.verdict) as "right" | "wrong",
+        salt: String(r.salt) as `0x${string}`,
+        createdAt: Number(r.created_at),
+      };
+    },
+
+    claimJudgment: async (receiptId, verdict) =>
+      insertOnce("INSERT INTO demo_judgments (receipt_id, verdict, token_id, tx_hash, created_at) VALUES (?, ?, NULL, NULL, ?)", [
+        receiptId,
+        verdict,
+        now(),
+      ]),
+
+    completeJudgment: async (receiptId, tokenId, txHash) => {
+      await driver.query("UPDATE demo_judgments SET token_id = ?, tx_hash = ? WHERE receipt_id = ?", [tokenId, txHash, receiptId]);
+    },
+
+    releaseJudgment: async (receiptId) => {
+      await driver.query("DELETE FROM demo_judgments WHERE receipt_id = ?", [receiptId]);
+    },
+
+    recordLift: async (humanId, txHash) => {
+      await insertOnce("INSERT INTO demo_lifts (tx_hash, human_id, created_at) VALUES (?, ?, ?)", [txHash, humanId.toLowerCase(), now()]);
+    },
+
+    liftsOf: async (humanId) =>
+      (await driver.query("SELECT * FROM demo_lifts WHERE human_id = ? ORDER BY created_at", [humanId.toLowerCase()])).map((r) => ({
+        at: Number(r.created_at),
+        txHash: String(r.tx_hash) as `0x${string}`,
+      })),
+
+    getJudgment: async (receiptId) => {
+      const r = (await driver.query("SELECT * FROM demo_judgments WHERE receipt_id = ?", [receiptId]))[0];
+      if (!r) return null;
+      return {
+        receiptId: String(r.receipt_id),
+        verdict: String(r.verdict) as "right" | "wrong",
+        tokenId: r.token_id === null || r.token_id === undefined ? null : String(r.token_id),
+        txHash: r.tx_hash === null || r.tx_hash === undefined ? null : (String(r.tx_hash) as `0x${string}`),
+        createdAt: Number(r.created_at),
+      };
+    },
 
     close: () => driver.close(),
   };
