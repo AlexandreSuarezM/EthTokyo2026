@@ -1,5 +1,5 @@
 import "server-only";
-import { getAddress, isAddress, keccak256, stringToHex, zeroHash, type Address, type Hash, type Hex } from "viem";
+import { getAddress, isAddress, keccak256, recoverMessageAddress, stringToHex, zeroHash, type Address, type Hash, type Hex } from "viem";
 import { z } from "zod";
 import type { Store } from "@/lib/db/store";
 import { DEMO_MODEL, DEMO_REPO, DEMO_TASK, askAi, commitmentOf, secureCoin, type Coin } from "@/lib/demo/ai";
@@ -36,19 +36,21 @@ export type ChainReads = {
   rewards(human: Hex): Promise<Rewards | null>;
 };
 
-/** Reward points and the prize pool, as the page shows them. */
+/** Reward tokens (RewardToken) and the bounty prize (Bounty), as the page shows them. */
 export type Rewards = {
-  points: number;
+  tokens: number;
   threshold: number;
   cooldown: number;
-  secondsUntilNextPoint: number;
-  optedIn: boolean;
+  secondsUntilNext: number;
+  qualified: boolean;
   claimed: boolean;
-  optedInCount: number;
-  deadline: number;
+  qualifiedCount: number;
+  claimOpensAt: number;
   poolWei: string;
   shareWei: string;
-  contract: Address;
+  bounty: Address;
+  token: Address;
+  codeURI: string;
 };
 
 /** Transactions sent by server keys. */
@@ -59,9 +61,9 @@ export type ChainWrites = {
   lift(human: Hex, reasonHash: Hex): Promise<Hash>;
   /** Admin (deployer): PermissionRegistry.applyPreset(human, "validator"). */
   grantValidator(human: Hex): Promise<Hash>;
-  /** Judge: ChallengeRewards.award. `awarded: false` when the cooldown is still running. Null = no rewards contract. */
-  award?(human: Hex, receiptId: bigint): Promise<{ awarded: true; txHash: Hash } | { awarded: false; reason: string }>;
-  /** Judge: ChallengeRewards.slash (all points). */
+  /** Judge: Bounty.award (+1 RewardToken per reviewed sample). `awarded: false` while the cooldown runs. */
+  award?(human: Hex, sampleId: Hex): Promise<{ awarded: true; txHash: Hash } | { awarded: false; reason: string }>;
+  /** Judge: RewardToken.slash (all tokens). */
   slash?(human: Hex, reasonHash: Hex): Promise<Hash>;
 };
 
@@ -77,6 +79,7 @@ const address = z.string().refine((v) => isAddress(v, { strict: false })).transf
 const ID = /^[0-9a-f]{64}$/;
 const askBody = z.strictObject({ account: address });
 const rejectBody = z.strictObject({ proposalId: z.string().regex(ID) });
+const reportBody = z.strictObject({ proposalId: z.string().regex(ID), signature: z.string().regex(/^0x[0-9a-fA-F]{130}$/) });
 const judgeBody = z.strictObject({ receiptId: z.string().regex(/^[0-9]{1,20}$/) });
 const liftBody = z.strictObject({ account: address, reason: z.string().trim().min(3).max(500) });
 
@@ -116,7 +119,26 @@ const toView = (p: ProposalView): AnswerView => ({
   commitHash: p.commitHash,
 });
 
-/** "Ask the AI": round 1 of a new task. */
+/** One reward per code sample: the sample id is derived from the served answer. */
+export const sampleIdOf = (answerId: string): Hex => keccak256(stringToHex(`hitl.sample:${answerId}`));
+
+export type TokenResult = null | { awarded: boolean; note: string; txHash: Hash | null };
+
+/** +1 RewardToken for reviewing a sample (approve or report), unless the shared cooldown still runs. */
+async function awardToken(deps: DemoDeps, human: Hex, answerId: string): Promise<TokenResult> {
+  if (!deps.writes.award) return null;
+  try {
+    const r = await deps.writes.award(human, sampleIdOf(answerId));
+    return r.awarded ? { awarded: true, note: "+1 reward token", txHash: r.txHash } : { awarded: false, note: r.reason, txHash: null };
+  } catch {
+    return { awarded: false, note: "Reward token not recorded (transaction failed).", txHash: null };
+  }
+}
+
+/** The message a wallet signs to report a code sample (one authentication per sample). */
+export const reportMessage = (proposalId: string) => `HITL demo: I report code sample ${proposalId} as not acceptable.`;
+
+/** "Spawn code sample": round 1 of a new task. */
 export async function ask(deps: DemoDeps, body: unknown): Promise<AnswerView> {
   const { account } = parse(askBody, body);
   await activeHuman(deps, account);
@@ -128,16 +150,31 @@ export async function ask(deps: DemoDeps, body: unknown): Promise<AnswerView> {
   return toView(p);
 }
 
-/** Reject = a new answer in the next round. Nothing on-chain, never a token. */
-export async function reject(deps: DemoDeps, body: unknown): Promise<AnswerView> {
-  const { proposalId } = parse(rejectBody, body);
-  const denied = await denyProposal({ store: deps.store, repos: deps.approve.repos }, { proposalId, input: "Rejected by the validator" });
+/**
+ * Report (the red button) = the user signs "this sample is not acceptable". It earns +1 reward token
+ * (reviewing is the work, whatever the code), is never punished, and serves a new answer (round +1).
+ */
+export async function reject(deps: DemoDeps, body: unknown): Promise<AnswerView & { token: TokenResult }> {
+  const { proposalId, signature } = parse(reportBody, body);
+  const p = await deps.store.getProposal(proposalId);
+  if (!p) throw new WorldError("invalid_request", "Unknown proposal.");
+  let signer: Address;
+  try {
+    signer = await recoverMessageAddress({ message: reportMessage(proposalId), signature: signature as Hex });
+  } catch {
+    throw new WorldError("invalid_request", "The report signature is malformed.");
+  }
+  if (getAddress(signer) !== getAddress(p.submitter)) throw new WorldError("rejected", "Only the reviewer can report this sample.");
+  const human = await activeHuman(deps, getAddress(p.submitter));
+
+  const denied = await denyProposal({ store: deps.store, repos: deps.approve.repos }, { proposalId, input: "Reported by the validator" });
+  const token = await awardToken(deps, human, p.headRef);
   const answer = await askAi(deps.store, deps.coin ?? secureCoin);
-  const p = await reviseProposal(
+  const next = await reviseProposal(
     { store: deps.store, repos: deps.approve.repos },
     { parentId: denied.next.parentId, headRef: answer.id, modelId: DEMO_MODEL },
   );
-  return toView(p);
+  return { ...toView(next), token };
 }
 
 /** Approve, step 1: CC-10 prepare, refused while restricted or banned. */
@@ -162,8 +199,10 @@ export type JudgeResult = {
   tokenId: string | null;
   txHash: Hash | null;
   alreadyJudged: boolean;
-  /** Right: +1 point, or why not (cooldown). Wrong: all points slashed. Null without a rewards contract. */
-  reward: null | { awarded: boolean; note: string; txHash: Hash | null };
+  /** +1 reward token for the approval (or why not: cooldown). Null without a bounty. */
+  token: TokenResult;
+  /** Wrong approval: all reward tokens slashed. */
+  slash: null | { txHash: Hash | null; note: string };
 };
 
 /**
@@ -183,43 +222,25 @@ export async function judge(deps: DemoDeps, body: unknown): Promise<JudgeResult>
   const fingerprintMatches = commitment === proposal.contextHash && commitment === onChainContext;
   if (!fingerprintMatches) throw new WorldError("rejected", "The fingerprint does not match the receipt. Refusing to judge.");
 
-  const base = { receiptId, verdict: answer.verdict, salt: answer.salt, commitment, fingerprintMatches };
+  const base = { receiptId, verdict: answer.verdict, salt: answer.salt, commitment, fingerprintMatches, tokenId: null, txHash: null };
   if (!(await deps.store.claimJudgment(receiptId, answer.verdict))) {
-    const j = await deps.store.getJudgment(receiptId);
-    return { ...base, tokenId: j?.tokenId ?? null, txHash: j?.txHash ?? null, alreadyJudged: true, reward: null };
+    return { ...base, alreadyJudged: true, token: null, slash: null };
   }
   const human = rec.humanId;
-  if (answer.verdict === "right") {
-    let reward: JudgeResult["reward"] = null;
-    if (deps.writes.award) {
-      try {
-        const r = await deps.writes.award(human, BigInt(receiptId));
-        reward = r.awarded ? { awarded: true, note: "+1 reward point", txHash: r.txHash } : { awarded: false, note: r.reason, txHash: null };
-      } catch {
-        reward = { awarded: false, note: "Reward point not recorded (transaction failed).", txHash: null };
-      }
+  // Reviewing earns +1 token whatever the code; a wrong approval then loses every token (slash only:
+  // the penalty NFT ladder is not used in this demo).
+  const token = await awardToken(deps, human, proposal.headRef);
+  if (answer.verdict === "right") return { ...base, alreadyJudged: false, token, slash: null };
+  let slash: JudgeResult["slash"] = null;
+  if (deps.writes.slash) {
+    try {
+      slash = { txHash: await deps.writes.slash(human, commitment), note: "Wrong approval: all reward tokens slashed" };
+    } catch {
+      await deps.store.releaseJudgment(receiptId); // nothing slashed: the judge may run again
+      throw new WorldError("verification_unavailable", "The slash transaction failed. Run the judge again.");
     }
-    return { ...base, tokenId: null, txHash: null, alreadyJudged: false, reward };
   }
-
-  try {
-    // Evidence = the revealed commitment: anyone can recompute it from code, verdict and salt.
-    const { tokenId, txHash } = await deps.writes.penalize(BigInt(receiptId), commitment);
-    await deps.store.completeJudgment(receiptId, tokenId, txHash);
-    let reward: JudgeResult["reward"] = null;
-    if (deps.writes.slash) {
-      try {
-        reward = { awarded: false, note: "All reward points slashed", txHash: await deps.writes.slash(human, commitment) };
-      } catch {
-        reward = { awarded: false, note: "Point slash failed (penalty token still minted).", txHash: null };
-      }
-    }
-    return { ...base, tokenId, txHash, alreadyJudged: false, reward };
-  } catch (e) {
-    await deps.store.releaseJudgment(receiptId); // nothing minted: the judge may run again
-    if (e instanceof WorldError) throw e;
-    throw new WorldError("verification_unavailable", "The penalty transaction failed. Run the judge again.");
-  }
+  return { ...base, alreadyJudged: false, token, slash };
 }
 
 /** The judge lifts a restriction early (score -> 0). The token stays. A ban can't be lifted. */

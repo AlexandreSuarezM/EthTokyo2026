@@ -4,7 +4,7 @@ import { CredentialRequest, IDKitRequestWidget, IDKitSessionWidget, type IDKitEr
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPublicClient, createWalletClient, custom, formatEther, type Address, type Hex } from "viem";
 import { sepolia } from "viem/chains";
-import { challengeRewardsAbi, humanRegistryAbi } from "@/lib/chain/abi";
+import { bountyAbi, humanRegistryAbi } from "@/lib/chain/abi";
 import { APPROVAL_TYPES } from "@/lib/chain/types";
 import { enrollSignal } from "@/lib/world/identity";
 
@@ -15,20 +15,22 @@ type Config = {
   explorer: string | null;
   contracts: { HumanRegistry: Address; PermissionRegistry: Address; ValidationReceipts: Address; PenaltyLedger: Address };
   judge: Address | null;
-  rewards: Address | null;
+  bounty: Address | null;
 };
 type Rewards = {
-  points: number;
+  tokens: number;
   threshold: number;
   cooldown: number;
-  secondsUntilNextPoint: number;
-  optedIn: boolean;
+  secondsUntilNext: number;
+  qualified: boolean;
   claimed: boolean;
-  optedInCount: number;
-  deadline: number;
+  qualifiedCount: number;
+  claimOpensAt: number;
   poolWei: string;
   shareWei: string;
-  contract: Address;
+  bounty: Address;
+  token: Address;
+  codeURI: string;
 };
 
 type Answer = { id: string; round: number; code: string; task: string; linesChanged: number; commitHash: Hex };
@@ -49,8 +51,10 @@ type JudgeResult = Judged & {
   commitment: Hex;
   fingerprintMatches: boolean;
   alreadyJudged: boolean;
-  reward: null | { awarded: boolean; note: string; txHash: Hex | null };
+  token: TokenNote;
+  slash: null | { txHash: Hex | null; note: string };
 };
+type TokenNote = null | { awarded: boolean; note: string; txHash: Hex | null };
 type Attestation = { humanId: Hex; sessionRef: Hex; credentialLevel: number; deadline: string; signature: Hex; humanRegistry: Address };
 type Prepared = {
   approvalId: string;
@@ -112,7 +116,7 @@ export default function DemoApp({ config, appId }: { config: Config; appId: `app
   const [notice, setNotice] = useState<string | null>(null);
   const [lastJudge, setLastJudge] = useState<JudgeResult | null>(null);
   const [countdown, setCountdown] = useState(0);
-  const [reason, setReason] = useState("");
+  const [tokenCountdown, setTokenCountdown] = useState(0);
   const [enrollRp, setEnrollRp] = useState<{ rp_context: RpContext; action?: string } | null>(null);
   const [sessionRp, setSessionRp] = useState<{ rp_context: RpContext } | null>(null);
   const [pendingEnroll, setPendingEnroll] = useState<{ enrollmentId: string; sessionSignal: string } | null>(null);
@@ -164,7 +168,18 @@ export default function DemoApp({ config, appId }: { config: Config; appId: `app
     const s = await api<Standing>(`/api/demo/standing?account=${acc}`);
     setStanding(s);
     setCountdown(s.restrictedSeconds);
+    setTokenCountdown(s.rewards?.secondsUntilNext ?? 0);
   }, [account]);
+
+  // next-token countdown (shared 30 s cooldown); re-read the chain when it ends
+  useEffect(() => {
+    if (tokenCountdown <= 0) return;
+    const id = setTimeout(() => {
+      if (tokenCountdown === 1) void refresh().catch(() => {});
+      setTokenCountdown((c) => Math.max(0, c - 1));
+    }, 1000);
+    return () => clearTimeout(id);
+  }, [tokenCountdown, refresh]);
 
   // live countdown; re-read the chain when it ends (the restriction lifts by itself)
   useEffect(() => {
@@ -247,9 +262,18 @@ export default function DemoApp({ config, appId }: { config: Config; appId: `app
       setAnswer(await api<Answer>("/api/demo/ask", { account }));
     });
 
+  /** Report: the wallet signs "not acceptable" (one authentication per sample), +1 token, next round. */
   const reject = () =>
-    run("Asking again…", async () => {
-      setAnswer(await api<Answer>("/api/demo/reject", { proposalId: answer!.id }));
+    run("Reporting…", async () => {
+      const { wallet } = clients();
+      setBusy("Sign the report in MetaMask…");
+      const signature = await wallet.signMessage({ account: account!, message: `HITL demo: I report code sample ${answer!.id} as not acceptable.` });
+      setBusy("Recording your review…");
+      const r = await api<Answer & { token: TokenNote }>("/api/demo/reject", { proposalId: answer!.id, signature });
+      setAnswer(r);
+      setLastJudge(null);
+      await refresh();
+      if (r.token) setNotice(`Reported. ${r.token.note}`);
     });
 
   async function completeApproval(prepared: Prepared, signature: Hex, result?: unknown) {
@@ -295,20 +319,12 @@ export default function DemoApp({ config, appId }: { config: Config; appId: `app
     run(label, async () => {
       const { wallet, pub } = clients();
       setBusy(`Confirm in MetaMask: ${fn}…`);
-      const hash = await wallet.writeContract({ account: account!, chain: sepolia, address: config.rewards!, abi: challengeRewardsAbi, functionName: fn });
+      const hash = await wallet.writeContract({ account: account!, chain: sepolia, address: config.bounty!, abi: bountyAbi, functionName: fn });
       setBusy("Waiting for Sepolia…");
       const r = await pub.waitForTransactionReceipt({ hash });
       if (r.status !== "success") throw new Error(`${fn} reverted`);
       await refresh();
       setNotice(`${done} tx ${short(hash)}`);
-    });
-
-  const lift = () =>
-    run("The judge is lifting the restriction…", async () => {
-      const r = await api<{ txHash: Hex }>("/api/demo/lift", { account, reason });
-      setReason("");
-      await refresh();
-      setNotice(`Restriction lifted by the judge (the token stays). tx ${short(r.txHash)}`);
     });
 
   const s = standing;
@@ -375,10 +391,10 @@ export default function DemoApp({ config, appId }: { config: Config; appId: `app
               </div>
               <pre style={{ background: "#0d1117", color: "#e6edf3", padding: 14, borderRadius: 8, fontSize: 15, overflowX: "auto" }}>{answer.code}</pre>
               <Btn big color={C.green} onClick={approve} disabled={!canUse}>✓ Approve</Btn>
-              <Btn big color={C.red} onClick={reject} disabled={!canUse}>✗ Reject</Btn>
+              <Btn big color={C.red} onClick={reject} disabled={!canUse}>✗ Report</Btn>
               <Btn big color={C.grey} onClick={ask} disabled={!canUse}>⏭ Skip</Btn>
               <div style={{ fontSize: 12, color: "#57606a", marginTop: 8 }}>
-                Reject asks again (round +1). Skip moves on to the next code sample. Neither touches the chain. Approve records a receipt on-chain; the verdict is sealed in it before you decide.
+                Approve or Report: each review earns +1 reward token (at most one per 30 s). Approving code that fails loses all your tokens. Skip does nothing. The verdict is sealed before you decide.
               </div>
             </div>
           )}
@@ -388,17 +404,17 @@ export default function DemoApp({ config, appId }: { config: Config; appId: `app
               <div style={{ fontSize: 13 }}>
                 Fingerprint matches ✓ <code>hash(code, &quot;{lastJudge.verdict}&quot;, salt {short(lastJudge.salt)}) = {short(lastJudge.commitment)}</code> = contextHash on-chain
               </div>
-              {lastJudge.reward && (
-                <div style={{ fontSize: 14, marginTop: 4, color: lastJudge.reward.awarded ? C.green : lastJudge.verdict === "wrong" ? C.red : "#57606a" }}>
-                  ★ {lastJudge.reward.note} {lastJudge.reward.txHash && link("tx", lastJudge.reward.txHash, "tx")}
+              {lastJudge.token && (
+                <div style={{ fontSize: 14, marginTop: 4, color: lastJudge.token.awarded ? C.green : "#57606a" }}>
+                  ★ {lastJudge.token.note} {lastJudge.token.txHash && link("tx", lastJudge.token.txHash, "tx")}
                 </div>
               )}
               {lastJudge.verdict === "right" ? (
                 <div style={{ color: C.green, fontWeight: 700, marginTop: 6 }}>Good decision ✓</div>
               ) : (
                 <div style={{ color: C.red, fontWeight: 700, marginTop: 6 }}>
-                  You approved wrong code: soulbound penalty token #{lastJudge.tokenId} minted{" "}
-                  {lastJudge.txHash && link("tx", lastJudge.txHash, "mint tx")}
+                  You approved code that fails. {lastJudge.slash?.note ?? "Tokens slashed"}{" "}
+                  {lastJudge.slash?.txHash && link("tx", lastJudge.slash.txHash, "slash tx")}
                 </div>
               )}
             </div>
@@ -412,62 +428,41 @@ export default function DemoApp({ config, appId }: { config: Config; appId: `app
             <p style={{ color: C.grey }}>Connect and enroll to see your standing.</p>
           ) : (
             <>
-              <div style={{ fontSize: 22, fontWeight: 700, color: status === "active" ? C.green : status === "restricted" ? C.yellow : C.red }}>
-                {status === "active" ? "Active" : status === "restricted" ? `Restricted · ${mmss(countdown)}` : "Banned"}
-              </div>
-              <div style={{ margin: "6px 0 10px" }}>Penalty tokens: <b>{s.tokens} / 3</b></div>
-              <ul style={{ paddingLeft: 18, margin: 0, fontSize: 14 }}>
-                {s.penalties.map((p) => (
-                  <li key={p.tokenId}>
-                    Token {link("token", p.tokenId, `#${p.tokenId}`, p.tokenId)} · receipt #{p.receiptId} · {new Date(p.mintedAt * 1000).toLocaleTimeString()}
-                    {p.lifted && <span style={{ color: "#57606a" }}> · restriction lifted</span>}
-                  </li>
-                ))}
-              </ul>
-              {status === "restricted" && (
-                <div style={{ marginTop: 14, paddingTop: 10, borderTop: "1px dashed #d0d7de" }}>
-                  <div style={{ fontWeight: 600, marginBottom: 6 }}>Judge: lift restriction</div>
-                  <input
-                    value={reason}
-                    onChange={(e) => setReason(e.target.value)}
-                    placeholder="Reason (required)"
-                    style={{ width: "100%", padding: 6, marginBottom: 6, boxSizing: "border-box" }}
-                  />
-                  <Btn color="#8250df" onClick={lift} disabled={!!busy || reason.trim().length < 3}>Lift restriction</Btn>
-                  <div style={{ fontSize: 12, color: "#57606a", marginTop: 4 }}>The token stays: it is the permanent record.</div>
-                </div>
-              )}
-              {status === "banned" && <p style={{ color: C.red, fontSize: 14 }}>3 tokens: banned for good. A ban can&apos;t be lifted, not even by the judge.</p>}
-              {s.rewards && (
-                <div style={{ marginTop: 14, paddingTop: 10, borderTop: "1px solid #d0d7de" }}>
-                  <div style={{ fontWeight: 600 }}>
-                    ★ Reward points: {s.rewards.points} / {s.rewards.threshold}
-                    {s.rewards.optedIn && <span style={{ color: C.green }}> · in the prize ✓</span>}
+              {!s.rewards ? (
+                <p style={{ color: C.grey }}>No bounty deployed.</p>
+              ) : (
+                <>
+                  <div style={{ fontSize: 22, fontWeight: 700 }}>
+                    ★ {s.rewards.tokens} / {s.rewards.threshold} reward tokens
+                  </div>
+                  <div style={{ fontSize: 14, margin: "4px 0 8px", color: tokenCountdown > 0 ? C.yellow : C.green }}>
+                    {tokenCountdown > 0 ? `Next token in ${mmss(tokenCountdown)}` : "Your next review can earn a token"}
                   </div>
                   <div style={{ fontSize: 13, color: "#57606a" }}>
-                    +1 per correct approval, at most one per {mmss(s.rewards.cooldown)} (difficulty) · next point{" "}
-                    {s.rewards.secondsUntilNextPoint > 0 ? `in ${mmss(s.rewards.secondsUntilNextPoint)}` : "available"}
+                    Bounty {config.explorer && link("address", s.rewards.bounty, "contract")} · challenge code{" "}
+                    <a href={s.rewards.codeURI} target="_blank" rel="noreferrer">
+                      link ↗
+                    </a>
                     <br />
-                    Prize pool {formatEther(BigInt(s.rewards.poolWei))} ETH · {s.rewards.optedInCount} qualified · deadline{" "}
-                    {new Date(s.rewards.deadline * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                    {" · "}
-                    {config.explorer && link("address", s.rewards.contract, "contract")}
+                    Prize pool {formatEther(BigInt(s.rewards.poolWei))} ETH · {s.rewards.qualifiedCount} qualified
+                    {s.rewards.qualified && <span style={{ color: C.green }}> · you qualified ✓</span>}
                   </div>
-                  {!s.rewards.optedIn && Date.now() / 1000 <= s.rewards.deadline && (
-                    <Btn color="#bf8700" disabled={!!busy || s.rewards.points < s.rewards.threshold} onClick={() => rewardTx("optIn", "Opting in…", "You are in the prize ✓")}>
-                      Opt in to the prize
+                  {!s.rewards.qualified && (
+                    <Btn color="#bf8700" disabled={!!busy || s.rewards.tokens < s.rewards.threshold} onClick={() => rewardTx("optIn", "Qualifying…", "You qualified for the prize ✓")}>
+                      Qualify for the prize ({s.rewards.threshold} tokens)
                     </Btn>
                   )}
-                  {s.rewards.optedIn && !s.rewards.claimed && Date.now() / 1000 > s.rewards.deadline && (
+                  {s.rewards.qualified && !s.rewards.claimed && (
                     <Btn color={C.green} disabled={!!busy} onClick={() => rewardTx("claim", "Claiming…", "Prize share claimed ✓")}>
                       Claim {formatEther(BigInt(s.rewards.shareWei))} ETH
                     </Btn>
                   )}
-                  {s.rewards.claimed && <div style={{ color: C.green }}>Prize share claimed ✓</div>}
-                  <div style={{ fontSize: 12, color: "#57606a", marginTop: 4 }}>
-                    Points are soulbound. Approving wrong code slashes them all; once in the prize, your share is kept.
+                  {s.rewards.claimed && <div style={{ color: C.green, marginTop: 6 }}>Prize share claimed ✓</div>}
+                  <div style={{ fontSize: 12, color: "#57606a", marginTop: 8 }}>
+                    Tokens are soulbound. Every review earns one (at most one per {s.rewards.cooldown} s); approving code that fails loses them
+                    all. Once qualified, your prize share is kept.
                   </div>
-                </div>
+                </>
               )}
             </>
           )}
@@ -478,7 +473,7 @@ export default function DemoApp({ config, appId }: { config: Config; appId: `app
       <section style={{ ...C.card, marginTop: 16 }}>
         <h2 style={{ fontSize: 17, marginTop: 0 }}>Receipts</h2>
         {!s?.receipts.length ? (
-          <p style={{ color: C.grey }}>No receipts yet. Approving an answer records one on Sepolia (no token at approval).</p>
+          <p style={{ color: C.grey }}>No receipts yet. Approving a code sample records a receipt on Sepolia.</p>
         ) : (
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
             <thead>
@@ -503,9 +498,7 @@ export default function DemoApp({ config, appId }: { config: Config; appId: `app
                     ) : r.judged.verdict === "right" ? (
                       <span style={{ color: C.green }}>Good decision ✓</span>
                     ) : (
-                      <span style={{ color: C.red }}>
-                        Wrong → token #{r.judged.tokenId} {r.judged.txHash && link("tx", r.judged.txHash, "mint")}
-                      </span>
+                      <span style={{ color: C.red }}>Code failed: tokens slashed</span>
                     )}
                   </td>
                 </tr>

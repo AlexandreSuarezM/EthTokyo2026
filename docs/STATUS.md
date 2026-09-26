@@ -49,3 +49,7 @@ Our own cut-off: **submit before Saturday 24:00 (Sunday 00:00) Madrid**, leaving
 4. CC-20 docs + final security pass, finish `docs/DEBRIEF.md`
 5. Record the demo
 6. **Submit before 00:00 Madrid**
+- 20:30 Bounty model (user's rules): `RewardToken` (soulbound, shared 30 s cooldown, slash) + `Bounty` (code link,
+  +1 per reviewed sample, qualify at 5, equal split, claim opens at deploy + 1 s, 0.01 ETH). Report = signed, +1;
+  failing approval = +1 then slash all; skip = nothing; penalty ladder off in the demo. Deployed on Sepolia, verified
+  (report +1 → approve failing code → slashed to 0; pool untouched). 110 forge + 151 app tests.

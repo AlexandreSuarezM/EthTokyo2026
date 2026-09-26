@@ -10,8 +10,8 @@ import {
   type Hex,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { challengeRewardsAbi, humanRegistryAbi, penaltyLedgerAbi, permissionRegistryAbi, validationReceiptsAbi } from "@/lib/chain/abi";
-import { loadRewardsConfig } from "@/lib/chain/config";
+import { bountyAbi, humanRegistryAbi, penaltyLedgerAbi, permissionRegistryAbi, rewardTokenAbi, validationReceiptsAbi } from "@/lib/chain/abi";
+import { loadBountyConfig } from "@/lib/chain/config";
 import { RelayError } from "@/lib/chain/relayer";
 import type { ChainReads, ChainWrites, DemoDeps } from "@/lib/demo/service";
 import { approveDeps } from "@/lib/server/approve";
@@ -27,7 +27,7 @@ export async function demoDeps(): Promise<DemoDeps> {
   const { config, publicClient, relayerWallet, chain, transport } = chainServices();
   const c = config.contracts;
   const store = await getStore();
-  const rw = loadRewardsConfig(env.CHAIN_ID)?.ChallengeRewards ?? null;
+  const bc = loadBountyConfig(env.CHAIN_ID);
   const read = <T>(address: Address, abi: Abi, functionName: string, args: unknown[] = []) =>
     publicClient.readContract({ address, abi, functionName, args } as never) as Promise<T>;
 
@@ -85,32 +85,32 @@ export async function demoDeps(): Promise<DemoDeps> {
     },
     lifts: (h) => store.liftsOf(h),
     rewards: async (h) => {
-      if (!rw) return null;
-      const r = <T>(fn: string, args: unknown[] = []) => read<T>(rw, challengeRewardsAbi, fn, args);
-      const [points, threshold, cooldown, next, optedIn, claimed, count, deadline, share, pool] = await Promise.all([
-        r<number>("pointsOf", [h]),
-        r<number>("threshold"),
-        r<bigint>("cooldown"),
-        r<bigint>("secondsUntilNextPoint", [h]),
-        r<boolean>("optedIn", [h]),
-        r<boolean>("claimed", [h]),
-        r<bigint>("optedInCount"),
-        r<bigint>("deadline"),
-        r<bigint>("shareOf"),
-        publicClient.getBalance({ address: rw }),
+      if (!bc) return null;
+      const b = <T>(fn: string, args: unknown[] = []) => read<T>(bc.Bounty, bountyAbi, fn, args);
+      const t = <T>(fn: string, args: unknown[] = []) => read<T>(bc.RewardToken, rewardTokenAbi, fn, args);
+      const [tokens, next, qualified, claimed, count, share, pool] = await Promise.all([
+        t<number>("balanceOf", [h]),
+        t<bigint>("secondsUntilNext", [h]),
+        b<boolean>("qualified", [h]),
+        b<boolean>("claimed", [h]),
+        b<bigint>("qualifiedCount"),
+        b<bigint>("shareNow"),
+        publicClient.getBalance({ address: bc.Bounty }),
       ]);
       return {
-        points: Number(points),
-        threshold: Number(threshold),
-        cooldown: Number(cooldown),
-        secondsUntilNextPoint: Number(next),
-        optedIn,
+        tokens: Number(tokens),
+        threshold: bc.threshold,
+        cooldown: bc.cooldown,
+        secondsUntilNext: Number(next),
+        qualified,
         claimed,
-        optedInCount: Number(count),
-        deadline: Number(deadline),
+        qualifiedCount: Number(count),
+        claimOpensAt: bc.claimOpensAt,
         poolWei: pool.toString(),
         shareWei: share.toString(),
-        contract: rw,
+        bounty: bc.Bounty,
+        token: bc.RewardToken,
+        codeURI: bc.codeURI,
       };
     },
   };
@@ -122,22 +122,24 @@ export async function demoDeps(): Promise<DemoDeps> {
       return { tokenId: ev ? (ev as unknown as { args: { tokenId: bigint } }).args.tokenId.toString() : "?", txHash: r.transactionHash };
     },
     lift: async (human, reasonHash) => (await send(relayerWallet, c.PenaltyLedger, penaltyLedgerAbi, "judgeLift", [human, reasonHash])).transactionHash as Hash,
-    ...(rw
+    ...(bc
       ? {
-          award: async (human: Hex, receiptId: bigint) => {
+          award: async (human: Hex, sampleId: Hex) => {
             try {
-              const r = await send(relayerWallet, rw, challengeRewardsAbi, "award", [human, receiptId]);
+              // Bounty.award calls RewardToken.mint: decode its errors too (CooldownActive)
+              const abi = [...bountyAbi, ...rewardTokenAbi.filter((x) => x.type === "error")] as Abi;
+              const r = await send(relayerWallet, bc.Bounty, abi, "award", [human, sampleId]);
               return { awarded: true as const, txHash: r.transactionHash as Hash };
             } catch (e) {
               if (e instanceof RelayError && e.errorName === "CooldownActive") {
-                return { awarded: false as const, reason: "No point this time: one point per cooldown (difficulty)." };
+                return { awarded: false as const, reason: `No token this time: one per ${bc.cooldown} s (difficulty).` };
               }
-              if (e instanceof RelayError && e.errorName === "DeadlinePassed") return { awarded: false as const, reason: "The challenge deadline has passed." };
+              if (e instanceof RelayError && e.errorName === "AlreadyAwarded") return { awarded: false as const, reason: "This sample already earned its token." };
               throw e;
             }
           },
           slash: async (human: Hex, reasonHash: Hex) =>
-            (await send(relayerWallet, rw, challengeRewardsAbi, "slash", [human, reasonHash])).transactionHash as Hash,
+            (await send(relayerWallet, bc.RewardToken, rewardTokenAbi, "slash", [human, reasonHash])).transactionHash as Hash,
         }
       : {}),
     grantValidator: async (human) => {
@@ -161,7 +163,7 @@ export function demoPublicConfig() {
     worldEnvironment: env.WORLD_ENVIRONMENT,
     explorer: env.CHAIN_ID === 11155111 ? "https://sepolia.etherscan.io" : null,
     contracts: config.contracts,
-    rewards: loadRewardsConfig(env.CHAIN_ID)?.ChallengeRewards ?? null,
+    bounty: loadBountyConfig(env.CHAIN_ID)?.Bounty ?? null,
     judge: config.operator ?? null,
   };
 }
