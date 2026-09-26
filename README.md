@@ -128,8 +128,7 @@ JUDGE_ADDRESS=0x... JUDGE_ACTION=grant   forge script script/ManageJudge.s.sol -
 # JUDGE_ACTION=revoke to remove one
 ```
 
-A judge then calls `award(human, sampleId)` / `slash(human, reason)` from their own wallet, e.g. in Etherscan's
-*Write Contract* tab (linked from the page once the sources are verified). Test:
+A judge then calls `award(human, sampleId)` / `slash(human, reason)` from their own wallet. Test:
 `test_Bounty_SeveralJudgesCanBeAddedAndRemoved`.
 
 ## Honest limits
