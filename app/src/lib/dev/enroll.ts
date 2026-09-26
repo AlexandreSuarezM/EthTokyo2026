@@ -2,7 +2,8 @@ import "server-only";
 import { zeroAddress, zeroHash } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { createAttester } from "@/lib/chain/attester";
-import type { CredentialLevel, Store } from "@/lib/db/store";
+import { sqliteDriver } from "@/lib/db/drivers";
+import { createStore, type CredentialLevel, type Store } from "@/lib/db/store";
 import { completeEnrollment, startEnrollment, type EnrollDeps } from "@/lib/enroll/service";
 import { WorldError } from "@/lib/world/errors";
 
@@ -12,6 +13,17 @@ import { WorldError } from "@/lib/world/errors";
  * - nobody is enrolled on-chain (registry reads return zero),
  * - the attestation is signed for verifyingContract = 0x0, so it can never be used on-chain.
  */
+
+let store: Promise<Store> | undefined;
+
+/**
+ * The smoke test uses its OWN in-memory database: its throwaway wallet must never be recorded as the
+ * account of a real human in the app database (that would block the real enrollment on /demo).
+ */
+export function devStore(): Promise<Store> {
+  store ??= sqliteDriver("file::memory:").then(createStore);
+  return store;
+}
 
 export const isDev = (env: Record<string, string | undefined> = process.env) => env.NODE_ENV !== "production";
 

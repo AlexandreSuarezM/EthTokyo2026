@@ -119,6 +119,28 @@ export default function DemoApp({ config, appId }: { config: Config; appId: `app
   const [approveRp, setApproveRp] = useState<{ rp_context: RpContext; prepared: Prepared; signature: Hex } | null>(null);
   const tick = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Follow MetaMask: switching accounts (or disconnecting) updates the page.
+  useEffect(() => {
+    const provider = eth() as (Eth & { on?(e: string, f: (a: unknown) => void): void; removeListener?(e: string, f: (a: unknown) => void): void }) | undefined;
+    if (!provider?.on) return;
+    const onAccounts = (accs: unknown) => {
+      const next = (accs as Address[])[0] ?? null;
+      setAccount(next);
+      setAnswer(null);
+      setLastJudge(null);
+      setStanding(null);
+      if (next)
+        void api<Standing>(`/api/demo/standing?account=${next}`)
+          .then((s) => {
+            setStanding(s);
+            setCountdown(s.restrictedSeconds);
+          })
+          .catch(() => {});
+    };
+    provider.on("accountsChanged", onAccounts);
+    return () => provider.removeListener?.("accountsChanged", onAccounts);
+  }, []);
+
   const link = (kind: "tx" | "address" | "token", v: string, label?: string, tokenId?: string) =>
     config.explorer ? (
       <a href={kind === "token" ? `${config.explorer}/token/${config.contracts.PenaltyLedger}?a=${tokenId}` : `${config.explorer}/${kind}/${v}`} target="_blank" rel="noreferrer">
@@ -342,7 +364,7 @@ export default function DemoApp({ config, appId }: { config: Config; appId: `app
             <p style={{ color: C.red, fontWeight: 700, fontSize: 18 }}>⛔ Repo access closed. Asking and approving are permanently disabled.</p>
           ) : (
             <>
-              <Btn color="#0969da" onClick={ask} disabled={!canUse}>Ask the AI: write a hello world function</Btn>
+              <Btn color="#0969da" onClick={ask} disabled={!canUse}>Spawn code sample</Btn>
               {status === "restricted" && <p style={{ color: C.yellow, fontWeight: 600 }}>Restricted: Ask and Approve are disabled for {mmss(countdown)}.</p>}
             </>
           )}
@@ -354,8 +376,9 @@ export default function DemoApp({ config, appId }: { config: Config; appId: `app
               <pre style={{ background: "#0d1117", color: "#e6edf3", padding: 14, borderRadius: 8, fontSize: 15, overflowX: "auto" }}>{answer.code}</pre>
               <Btn big color={C.green} onClick={approve} disabled={!canUse}>✓ Approve</Btn>
               <Btn big color={C.red} onClick={reject} disabled={!canUse}>✗ Reject</Btn>
+              <Btn big color={C.grey} onClick={ask} disabled={!canUse}>⏭ Skip</Btn>
               <div style={{ fontSize: 12, color: "#57606a", marginTop: 8 }}>
-                Reject asks again (round +1, nothing on-chain). Approve records a receipt on-chain. The verdict is sealed in the receipt before you decide.
+                Reject asks again (round +1). Skip moves on to the next code sample. Neither touches the chain. Approve records a receipt on-chain; the verdict is sealed in it before you decide.
               </div>
             </div>
           )}
