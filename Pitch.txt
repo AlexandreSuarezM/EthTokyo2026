@@ -1,6 +1,6 @@
 what i did in 1 sentence 
 
-APP that allows ANY user with a wallet to validate code and build trust with CODE submiters .
+APP that allows ANY user with a wallet authentificate and validate code and build trust with CODE submiters .
 
 Motivation : 
 Ai gets better but ia cant take responsability for mistakes . 
