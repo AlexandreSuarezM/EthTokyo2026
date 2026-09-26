@@ -130,6 +130,22 @@ validator is identified by their EIP-712 signature. This replaces "relayer submi
 - `WORLD_ENVIRONMENT` (default `production`) is the only environment the server accepts; `staging` is for the
   simulator only.
 
+## Reward points and prize pool (2026-09-26 15:00)
+
+Two tokens: the **accountability token** (PenaltyLedger: minted for approving wrong code, permanent, 3 = banned) and
+**reward points** (new `contracts/src/ChallengeRewards.sol`, separate so the audited contracts are untouched).
+- **Earn:** the judge awards **1 point** for a real receipt it ruled correct: once per receipt, only to that receipt's
+  validator (status Valid/Cleared), and **at most one point per `cooldown`** (the challenge difficulty in hours; 60 s
+  in the demo so it can be recorded). Points are soulbound: the contract has no transfer function at all.
+- **Slash:** the judge (automatically, when it mints an accountability token) or the owner sets a human's points to 0.
+- **Prize:** ETH funded by the owner. A human with **>= 5 points** opts in before the deadline; that is final (a later
+  slash takes the points, never the share). After the deadline each opted-in human claims an **equal share**. If
+  nobody opted in, the owner withdraws the pool.
+- **Sepolia:** `config/11155111.rewards.json` (`0x9d918d9f1Aa9Ae0a88679858718D0191973EC270`), pool 0.02 ETH, deadline
+  21:00 Madrid 26 Sep, cooldown 60 s, threshold 5, judge = relayer. A first deployment
+  (`0xAb95C5258d8633b9434f5e6E4D341E2167733753`) was used by the Sepolia smoke test; its throwaway wallet opted in and
+  its key is gone, so that pool (0.02 test ETH) is stuck: not used by the demo.
+
 ## Demo ladder and judge (DEMO_PLAN step 1, 2026-09-26 13:30)
 
 - **Judge** = a server oracle at the RELAYER address, holding both `ValidationReceipts.ORACLE_ROLE` (mints penalty

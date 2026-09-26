@@ -32,6 +32,23 @@ export type ChainReads = {
   receiptContextHash(id: bigint): Promise<Hex>;
   penalties(human: Hex): Promise<{ tokenId: string; receiptId: string; mintedAt: number; txHash: Hash }[]>;
   lifts(human: Hex): Promise<{ at: number; txHash: Hash }[]>;
+  /** ChallengeRewards (null when not deployed). */
+  rewards(human: Hex): Promise<Rewards | null>;
+};
+
+/** Reward points and the prize pool, as the page shows them. */
+export type Rewards = {
+  points: number;
+  threshold: number;
+  cooldown: number;
+  secondsUntilNextPoint: number;
+  optedIn: boolean;
+  claimed: boolean;
+  optedInCount: number;
+  deadline: number;
+  poolWei: string;
+  shareWei: string;
+  contract: Address;
 };
 
 /** Transactions sent by server keys. */
@@ -42,6 +59,10 @@ export type ChainWrites = {
   lift(human: Hex, reasonHash: Hex): Promise<Hash>;
   /** Admin (deployer): PermissionRegistry.applyPreset(human, "validator"). */
   grantValidator(human: Hex): Promise<Hash>;
+  /** Judge: ChallengeRewards.award. `awarded: false` when the cooldown is still running. Null = no rewards contract. */
+  award?(human: Hex, receiptId: bigint): Promise<{ awarded: true; txHash: Hash } | { awarded: false; reason: string }>;
+  /** Judge: ChallengeRewards.slash (all points). */
+  slash?(human: Hex, reasonHash: Hex): Promise<Hash>;
 };
 
 export type DemoDeps = {
@@ -141,6 +162,8 @@ export type JudgeResult = {
   tokenId: string | null;
   txHash: Hash | null;
   alreadyJudged: boolean;
+  /** Right: +1 point, or why not (cooldown). Wrong: all points slashed. Null without a rewards contract. */
+  reward: null | { awarded: boolean; note: string; txHash: Hash | null };
 };
 
 /**
@@ -163,15 +186,35 @@ export async function judge(deps: DemoDeps, body: unknown): Promise<JudgeResult>
   const base = { receiptId, verdict: answer.verdict, salt: answer.salt, commitment, fingerprintMatches };
   if (!(await deps.store.claimJudgment(receiptId, answer.verdict))) {
     const j = await deps.store.getJudgment(receiptId);
-    return { ...base, tokenId: j?.tokenId ?? null, txHash: j?.txHash ?? null, alreadyJudged: true };
+    return { ...base, tokenId: j?.tokenId ?? null, txHash: j?.txHash ?? null, alreadyJudged: true, reward: null };
   }
-  if (answer.verdict === "right") return { ...base, tokenId: null, txHash: null, alreadyJudged: false };
+  const human = rec.humanId;
+  if (answer.verdict === "right") {
+    let reward: JudgeResult["reward"] = null;
+    if (deps.writes.award) {
+      try {
+        const r = await deps.writes.award(human, BigInt(receiptId));
+        reward = r.awarded ? { awarded: true, note: "+1 reward point", txHash: r.txHash } : { awarded: false, note: r.reason, txHash: null };
+      } catch {
+        reward = { awarded: false, note: "Reward point not recorded (transaction failed).", txHash: null };
+      }
+    }
+    return { ...base, tokenId: null, txHash: null, alreadyJudged: false, reward };
+  }
 
   try {
     // Evidence = the revealed commitment: anyone can recompute it from code, verdict and salt.
     const { tokenId, txHash } = await deps.writes.penalize(BigInt(receiptId), commitment);
     await deps.store.completeJudgment(receiptId, tokenId, txHash);
-    return { ...base, tokenId, txHash, alreadyJudged: false };
+    let reward: JudgeResult["reward"] = null;
+    if (deps.writes.slash) {
+      try {
+        reward = { awarded: false, note: "All reward points slashed", txHash: await deps.writes.slash(human, commitment) };
+      } catch {
+        reward = { awarded: false, note: "Point slash failed (penalty token still minted).", txHash: null };
+      }
+    }
+    return { ...base, tokenId, txHash, alreadyJudged: false, reward };
   } catch (e) {
     await deps.store.releaseJudgment(receiptId); // nothing minted: the judge may run again
     if (e instanceof WorldError) throw e;
@@ -220,6 +263,7 @@ export type Standing = {
   restrictedSeconds: number;
   penalties: { tokenId: string; receiptId: string; mintedAt: number; txHash: Hash; lifted: boolean }[];
   receipts: { receiptId: string; txHash: Hash; createdAt: number; judged: null | { verdict: "right" | "wrong"; tokenId: string | null; txHash: Hash | null } }[];
+  rewards: Rewards | null;
 };
 
 /** "Your standing": read from the chain (score, stage, tokens) plus our receipts and the judge's rulings. */
@@ -227,9 +271,21 @@ export async function standing(deps: DemoDeps, account: string): Promise<Standin
   if (!isAddress(account, { strict: false })) throw new WorldError("invalid_request", "Bad address.");
   const human = await onChain(() => deps.reads.humanOf(getAddress(account)));
   if (human === zeroHash) {
-    return { enrolled: false, humanId: null, level: 0, status: "none", stage: 0, score: "0", tokens: 0, restrictedSeconds: 0, penalties: [], receipts: [] };
+    return {
+      enrolled: false,
+      humanId: null,
+      level: 0,
+      status: "none",
+      stage: 0,
+      score: "0",
+      tokens: 0,
+      restrictedSeconds: 0,
+      penalties: [],
+      receipts: [],
+      rewards: null,
+    };
   }
-  const [level, stage, score, tokens, banned, restrictedSeconds, penalties, lifts] = await onChain(() =>
+  const [level, stage, score, tokens, banned, restrictedSeconds, penalties, lifts, rewards] = await onChain(() =>
     Promise.all([
       deps.reads.levelOf(human),
       deps.reads.stageOf(human),
@@ -239,6 +295,7 @@ export async function standing(deps: DemoDeps, account: string): Promise<Standin
       deps.reads.secondsRestricted(human),
       deps.reads.penalties(human),
       deps.reads.lifts(human),
+      deps.reads.rewards(human),
     ]),
   );
   const recs = await deps.store.receiptsOfHuman(human);
@@ -263,5 +320,6 @@ export async function standing(deps: DemoDeps, account: string): Promise<Standin
       .sort((a, b) => a.mintedAt - b.mintedAt)
       .map((p, i, all) => ({ ...p, lifted: lifts.some((l) => l.at >= p.mintedAt && (i + 1 >= all.length || l.at < all[i + 1].mintedAt)) })),
     receipts,
+    rewards,
   };
 }

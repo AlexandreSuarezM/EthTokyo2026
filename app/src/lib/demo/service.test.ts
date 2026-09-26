@@ -29,8 +29,9 @@ async function codeOf(p: Promise<unknown>) {
 /** A coin whose flips the test scripts: true = correct answer. */
 function scriptedCoin(flips: boolean[]): Coin {
   let n = 0;
+  let f = 0;
   return {
-    flip: () => flips[n++ % flips.length],
+    flip: () => flips[f++ % flips.length],
     pick: () => 0,
     salt: () => `0x${String(n).padStart(64, "0")}` as Hex,
     id: () => `${String(++n).padStart(8, "0")}`.padEnd(64, "a"),
@@ -66,6 +67,7 @@ async function world(flips: boolean[] = [true]): Promise<World> {
     receiptContextHash: async (id) => chainState.contexts.get(id) ?? zeroHash,
     penalties: async () => [],
     lifts: async () => [],
+    rewards: async () => null,
   };
   const deps: DemoDeps = {
     store,
@@ -199,6 +201,36 @@ describe("demo flow", () => {
 
       const st = await standing(w.deps, w.user.address);
       expect(st.receipts[0]).toMatchObject({ receiptId: r.receiptId, judged: { verdict: "wrong", tokenId: "1" } });
+    });
+
+    it("reward points: a right approval earns +1 (or reports the cooldown); a wrong one slashes all points", async () => {
+      w = await world([true, true, false]);
+      const awarded: bigint[] = [];
+      const slashed: Hex[] = [];
+      let cooldown = false;
+      w.deps.writes.award = async (_h, id) => {
+        if (cooldown) return { awarded: false, reason: "No point this time: one point per cooldown (difficulty)." };
+        awarded.push(id);
+        return { awarded: true, txHash: `0x${"44".repeat(32)}` as Hash };
+      };
+      w.deps.writes.slash = async (h) => {
+        slashed.push(h);
+        return `0x${"55".repeat(32)}` as Hash;
+      };
+
+      const r1 = await approveAnswer(w, (await ask(w.deps, { account: w.user.address })).id);
+      expect((await judge(w.deps, { receiptId: r1.receiptId })).reward).toMatchObject({ awarded: true, note: "+1 reward point" });
+
+      cooldown = true;
+      const r2 = await approveAnswer(w, (await ask(w.deps, { account: w.user.address })).id);
+      expect((await judge(w.deps, { receiptId: r2.receiptId })).reward).toMatchObject({ awarded: false });
+      expect(awarded).toEqual([BigInt(r1.receiptId)]);
+
+      const r3 = await approveAnswer(w, (await ask(w.deps, { account: w.user.address })).id);
+      const j3 = await judge(w.deps, { receiptId: r3.receiptId });
+      expect(j3.tokenId).toBe("1");
+      expect(j3.reward).toMatchObject({ note: "All reward points slashed" });
+      expect(slashed).toEqual([w.human]);
     });
 
     it("refuses to judge when the on-chain fingerprint doesn't match", async () => {

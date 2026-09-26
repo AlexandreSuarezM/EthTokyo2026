@@ -15,7 +15,7 @@ remappings = [
 # Deploy.s.sol reads presets and writes deployed addresses
 fs_permissions = [
   { access = "read", path = "../environments" },
-  { access = "write", path = "../config" },
+  { access = "read-write", path = "../config" },
 ]
 
 [lint]

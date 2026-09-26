@@ -35,6 +35,9 @@ Our own cut-off: **submit before Saturday 24:00 (Sunday 00:00) Madrid**, leaving
   new round, approve → receipt, judge reveal + fingerprint + mint, countdown, judge lift. Full ladder run on Sepolia
   through the API with a throwaway wallet: token 1 (297 s) → lift → 2× Good decision → token 2 (597 s) → lift →
   token 3 → banned; lift and ask refused when banned. 150 app tests green. Clips: user to record with MetaMask.
+- 15:10 Scope add: reward points + prize (`ChallengeRewards`), deployed to Sepolia; judge awards +1 per correct
+  approval (60 s cooldown), slashes on a wrong one; opt in at 5; equal split after 21:00. Verified on Sepolia
+  (5 points → opt in → wrong approval → points 0, prize seat kept). 110 forge + 151 app tests.
 
 ## Order for the rest of Saturday (superseded by docs/DEMO_PLAN.md)
 

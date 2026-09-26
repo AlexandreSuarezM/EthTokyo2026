@@ -10,14 +10,14 @@ import {
   type Hex,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { humanRegistryAbi, penaltyLedgerAbi, permissionRegistryAbi, validationReceiptsAbi } from "@/lib/chain/abi";
+import { challengeRewardsAbi, humanRegistryAbi, penaltyLedgerAbi, permissionRegistryAbi, validationReceiptsAbi } from "@/lib/chain/abi";
+import { loadRewardsConfig } from "@/lib/chain/config";
 import { RelayError } from "@/lib/chain/relayer";
 import type { ChainReads, ChainWrites, DemoDeps } from "@/lib/demo/service";
 import { approveDeps } from "@/lib/server/approve";
 import { chainServices } from "@/lib/server/chain";
 import { serverEnv } from "@/lib/server/env";
 import { getStore } from "@/lib/server/store";
-import { fromRevert } from "@/lib/world/approve";
 
 const VALIDATOR_PRESET = keccak256(stringToHex("validator"));
 
@@ -27,6 +27,7 @@ export async function demoDeps(): Promise<DemoDeps> {
   const { config, publicClient, relayerWallet, chain, transport } = chainServices();
   const c = config.contracts;
   const store = await getStore();
+  const rw = loadRewardsConfig(env.CHAIN_ID)?.ChallengeRewards ?? null;
   const read = <T>(address: Address, abi: Abi, functionName: string, args: unknown[] = []) =>
     publicClient.readContract({ address, abi, functionName, args } as never) as Promise<T>;
 
@@ -40,7 +41,7 @@ export async function demoDeps(): Promise<DemoDeps> {
       const revert = e.walk?.((x) => (x as { data?: { errorName?: string } })?.data?.errorName !== undefined) as
         | { data?: { errorName?: string } }
         | undefined;
-      throw fromRevert(revert?.data?.errorName);
+      throw new RelayError("reverted", revert?.data?.errorName); // no transaction was sent
     }
     const hash = await wallet.writeContract(request as never);
     const receipt = await publicClient.waitForTransactionReceipt({ hash });
@@ -83,6 +84,35 @@ export async function demoDeps(): Promise<DemoDeps> {
       return out;
     },
     lifts: (h) => store.liftsOf(h),
+    rewards: async (h) => {
+      if (!rw) return null;
+      const r = <T>(fn: string, args: unknown[] = []) => read<T>(rw, challengeRewardsAbi, fn, args);
+      const [points, threshold, cooldown, next, optedIn, claimed, count, deadline, share, pool] = await Promise.all([
+        r<number>("pointsOf", [h]),
+        r<number>("threshold"),
+        r<bigint>("cooldown"),
+        r<bigint>("secondsUntilNextPoint", [h]),
+        r<boolean>("optedIn", [h]),
+        r<boolean>("claimed", [h]),
+        r<bigint>("optedInCount"),
+        r<bigint>("deadline"),
+        r<bigint>("shareOf"),
+        publicClient.getBalance({ address: rw }),
+      ]);
+      return {
+        points: Number(points),
+        threshold: Number(threshold),
+        cooldown: Number(cooldown),
+        secondsUntilNextPoint: Number(next),
+        optedIn,
+        claimed,
+        optedInCount: Number(count),
+        deadline: Number(deadline),
+        poolWei: pool.toString(),
+        shareWei: share.toString(),
+        contract: rw,
+      };
+    },
   };
 
   const writes: ChainWrites = {
@@ -92,6 +122,24 @@ export async function demoDeps(): Promise<DemoDeps> {
       return { tokenId: ev ? (ev as unknown as { args: { tokenId: bigint } }).args.tokenId.toString() : "?", txHash: r.transactionHash };
     },
     lift: async (human, reasonHash) => (await send(relayerWallet, c.PenaltyLedger, penaltyLedgerAbi, "judgeLift", [human, reasonHash])).transactionHash as Hash,
+    ...(rw
+      ? {
+          award: async (human: Hex, receiptId: bigint) => {
+            try {
+              const r = await send(relayerWallet, rw, challengeRewardsAbi, "award", [human, receiptId]);
+              return { awarded: true as const, txHash: r.transactionHash as Hash };
+            } catch (e) {
+              if (e instanceof RelayError && e.errorName === "CooldownActive") {
+                return { awarded: false as const, reason: "No point this time: one point per cooldown (difficulty)." };
+              }
+              if (e instanceof RelayError && e.errorName === "DeadlinePassed") return { awarded: false as const, reason: "The challenge deadline has passed." };
+              throw e;
+            }
+          },
+          slash: async (human: Hex, reasonHash: Hex) =>
+            (await send(relayerWallet, rw, challengeRewardsAbi, "slash", [human, reasonHash])).transactionHash as Hash,
+        }
+      : {}),
     grantValidator: async (human) => {
       if (!env.DEPLOYER_PRIVATE_KEY) throw new Error("DEPLOYER_PRIVATE_KEY is not set");
       const admin = createWalletClient({ account: privateKeyToAccount(env.DEPLOYER_PRIVATE_KEY), chain, transport });
@@ -113,6 +161,7 @@ export function demoPublicConfig() {
     worldEnvironment: env.WORLD_ENVIRONMENT,
     explorer: env.CHAIN_ID === 11155111 ? "https://sepolia.etherscan.io" : null,
     contracts: config.contracts,
+    rewards: loadRewardsConfig(env.CHAIN_ID)?.ChallengeRewards ?? null,
     judge: config.operator ?? null,
   };
 }

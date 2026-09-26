@@ -14,6 +14,9 @@
   (`PermissionRegistry.applyPreset`). In production an admin or a sponsoring human with `GRANT` does this by hand.
 - **Demo: standing is partly read from our database.** Token ids and lift transactions come from what the judge
   recorded (the free-tier RPC can't scan logs); scores, stages, counts, bans and mint times are read on-chain.
+- **Rewards: the judge decides who earns points** (one per correct approval, rate-limited by the cooldown) and can
+  slash them; the owner can slash too. Opting in is final, so a user can't be robbed of a share once qualified, but
+  the judge could refuse to award points. The pool split is equal, with integer-division dust left in the contract.
 - **Demo: `WORLD_ID_MODE=simulated` proves no humanity.** Simulated humans are enrolled without a World ID proof.
   They are marked on-chain (credential level 3, never Orb, capped like Selfie) and every API response says
   `simulated: true`, but nothing stops one person from enrolling several simulated wallets (AUDIT C-11).
