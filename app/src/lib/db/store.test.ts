@@ -111,4 +111,67 @@ describe.each(drivers)("store (%s)", (_name, makeDriver) => {
     const results = await Promise.all(Array.from({ length: 10 }, () => store.consumeApproval("merge:race")));
     expect(results.filter(Boolean)).toHaveLength(1);
   });
+
+  it("releases an approval key", async () => {
+    await store.consumeApproval("merge:released");
+    await store.releaseApproval("merge:released");
+    expect(await store.consumeApproval("merge:released")).toBe(true);
+  });
+
+  const proposal = (id: string, parentId: string | null = null) => ({
+    id,
+    threadId: "t".repeat(64),
+    parentId,
+    repo: "acme/web",
+    baseSha: "1".repeat(40),
+    headRef: "agent/x",
+    headSha: "2".repeat(40),
+    linesChanged: 3,
+    contextHash: `0x${"cc".repeat(32)}` as const,
+    task: "Add a footer",
+    feedback: ["first", "second, with \"quotes\""],
+    round: 3,
+    modelId: "model-x",
+    submitter: account,
+  });
+
+  it("stores proposals; one deny wins; one revision per parent", async () => {
+    expect(await store.saveProposal(proposal("p1"))).toBe(true);
+    expect(await store.saveProposal(proposal("p1"))).toBe(false);
+    expect(await store.getProposal("p1")).toMatchObject({ status: "open", feedback: ["first", "second, with \"quotes\""], denyInput: null, parentId: null });
+
+    const denies = await Promise.all(["a", "b", "c"].map((input) => store.denyProposal("p1", input)));
+    expect(denies.filter(Boolean)).toHaveLength(1);
+    expect((await store.getProposal("p1"))?.status).toBe("denied");
+    expect(await store.denyProposal("missing", "x")).toBeNull();
+
+    expect(await store.saveProposal(proposal("p2", "p1"))).toBe(true);
+    expect(await store.saveProposal(proposal("p3", "p1"))).toBe(false); // p1 already revised
+    expect(await store.saveProposal(proposal("p4"))).toBe(true); // many round-1 proposals (NULL parent)
+  });
+
+  it("hands a pending approval to exactly one taker", async () => {
+    const a = { id: "a1", proposalId: "p1", message: "{}", digest: `0x${"dd".repeat(32)}` as const, expiresAt: 5 };
+    expect(await store.savePendingApproval(a)).toBe(true);
+    expect(await store.getPendingApproval("a1")).toEqual(a);
+    const taken = await Promise.all([1, 2, 3].map(() => store.takePendingApproval("a1")));
+    expect(taken.filter(Boolean)).toHaveLength(1);
+    expect(await store.getPendingApproval("a1")).toBeNull();
+  });
+
+  it("stores one receipt per approval key and per receipt id", async () => {
+    const r = {
+      approvalKey: "merge:k1",
+      receiptId: "7",
+      txHash: `0x${"ee".repeat(32)}` as const,
+      proposalId: "p1",
+      humanId: human,
+      proofRef: `0x${"ff".repeat(32)}` as const,
+      worldResult: "{}",
+    };
+    expect(await store.saveReceipt(r)).toBe(true);
+    expect(await store.saveReceipt(r)).toBe(false);
+    expect(await store.saveReceipt({ ...r, approvalKey: "merge:k2" })).toBe(false); // same on-chain receipt id
+    expect(await store.receiptOf("merge:k1")).toMatchObject({ receiptId: "7", humanId: human });
+  });
 });

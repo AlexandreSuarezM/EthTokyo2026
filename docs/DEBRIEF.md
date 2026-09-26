@@ -37,4 +37,12 @@
   without it. The docs don't say whether the verify API checks the proof against the `signal_hash` we
   forward, or only that it's well-formed.
 
+- **2026-09-26 — Staging is closed by default (CC-10):** a staging verify call to `/api/v4/verify/{rp_id}` returns
+  `403 {"code":"environment_not_allowed","detail":"Staging verification is not open for this app. Open a staging
+  window with the set_world_id_staging_verification tool, ..."}`. Neither the IDKit integrate page nor the verify
+  API reference mentions this 403 or the tool; the integrate page only says to use the simulator with
+  `environment: "staging"`. The explanation is in the developer-portal repo (PR #2307, merged 2026-09-25): an
+  authenticated MCP tool opens a 24h staging window per app and issues a one-time token. We build production-only
+  for now, so the simulator can't give us extra test humans.
+
 ## What worked well
