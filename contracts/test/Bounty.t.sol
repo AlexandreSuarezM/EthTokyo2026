@@ -197,6 +197,44 @@ contract BountyTest is Base {
         bounty.withdraw(payable(bob));
     }
 
+    function test_Bounty_SeveralJudgesCanBeAddedAndRemoved() public {
+        address judge2 = makeAddr("judge2");
+        bytes32 bRole = bounty.JUDGE_ROLE();
+        bytes32 tRole = token.JUDGE_ROLE();
+        vm.startPrank(admin); // what script/ManageJudge.s.sol does
+        bounty.grantRole(bRole, judge2);
+        token.grantRole(tRole, judge2);
+        vm.stopPrank();
+
+        bytes32 h = _h(bob);
+        vm.prank(judge2); // a second judge awards...
+        bounty.award(h, keccak256("judge2 sample"));
+        assertEq(token.balanceOf(h), 1);
+        vm.prank(judge2); // ...and slashes
+        token.slash(h, REASON);
+        assertEq(token.balanceOf(h), 0);
+
+        vm.startPrank(admin);
+        bounty.revokeRole(bRole, judge2);
+        token.revokeRole(tRole, judge2);
+        vm.stopPrank();
+        vm.warp(_t + COOLDOWN);
+        vm.prank(judge2);
+        vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, judge2, bRole));
+        bounty.award(h, keccak256("after revoke"));
+        vm.prank(judge2);
+        vm.expectRevert();
+        token.slash(h, REASON);
+
+        vm.prank(judge); // the first judge is unaffected
+        bounty.award(h, keccak256("judge1 still works"));
+        assertEq(token.balanceOf(h), 1);
+
+        vm.prank(bob); // only the admin manages judges
+        vm.expectRevert();
+        bounty.grantRole(bRole, bob);
+    }
+
     function test_Bounty_BadConfig() public {
         vm.expectRevert(Bounty.BadConfig.selector);
         new Bounty(humans, token, admin, bytes32(0), "u", 0, 5);
