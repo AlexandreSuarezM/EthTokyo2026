@@ -71,8 +71,10 @@ take your prize seat. **Claim** pays your equal share of the pool.
 |---|---|---|---|
 | **01-enroll** | Connect MetaMask → Enroll with World ID → confirm | "Enrolled ✓ · credential: SIMULATED", yellow badge | "One human, one account. World ID runs in simulated mode here; the contract records it as SIMULATED, never Orb." |
 | **02-skip** | Spawn code sample → **⏭ Skip** | a new sample, nothing signed | "Skip costs nothing and earns nothing." |
-| **03-report** | on a **failing** sample → **✗ Report** → sign | round 2, "Reported. +1 reward token", 1/5 | "Reporting is a signed review: one token." |
-| **04-approve** | wait 30 s → on the **correct** sample → **✓ Approve** → sign | receipt with Etherscan link; judge box: **Fingerprint matches ✓**, **Good decision ✓**, **+1 reward token** | "The verdict was sealed in the receipt before I clicked: hash(code, verdict, salt). The judge reveals it; anyone can check." |
+| **03-report** | on a **failing** sample (no `
+`) → **✗ Report** → sign | round 2, "Reported. +1 reward token", 1/5 | "Reporting is a signed review: one token." |
+| **04-approve** | wait 30 s → on the **correct** sample (with `
+`) → **✓ Approve** → sign | receipt with Etherscan link; judge box: **Fingerprint matches ✓**, **Good decision ✓**, **+1 reward token** | "The verdict was sealed in the receipt before I clicked: hash(code, verdict, salt). The judge reveals it; anyone can check." |
 | **05-slash** | wait 30 s → on a **failing** sample → **✓ Approve** | "You approved code that fails. Wrong approval: all reward tokens slashed", 0/5 | "Approving broken code costs everything earned so far." |
 | **06-five** | earn 5 tokens again (reviews 30 s apart, never approve failing code) → **Qualify for the prize** | 5/5, "you qualified ✓", 1 qualified | "Five careful reviews, earned slowly, qualify me for the bounty." |
 | **07-claim** | **Claim 0.01 ETH** → confirm | "Prize share claimed ✓", balance up in MetaMask | "Qualified reviewers split the prize." |
@@ -96,14 +98,22 @@ take your prize seat. **Claim** pays your equal share of the pool.
 
 ## 7. Recognising right vs wrong samples
 
-The only correct sample:
-```js
-function helloWorld() {
-  return "Hello, World!";
+**Look at the `printf` line: only the correct program prints `
+`.**
+
+```c
+#include <stdio.h>
+
+int main(void)
+{
+    printf("Hello world!
+");
+    return 0;
 }
 ```
-Failing ones: `"Helo, World!"` (typo) · no `return` (a `const greeting`) · `function helloWord` (name) ·
-`// TODO: greet` (returns nothing) · a missing closing `}` (syntax error).
+Every failing sample prints `"Hello world!"` **without** `
+` and has one silly mistake: a missing `;` after
+`printf(...)`, `return exit;`, `print(...)` instead of `printf(...)`, or `return "0";`.
 
 ---
 

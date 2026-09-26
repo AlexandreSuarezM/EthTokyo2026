@@ -1,3 +1,0 @@
-function helloWorld() {
-  // TODO: greet
-}
