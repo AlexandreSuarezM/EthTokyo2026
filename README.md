@@ -118,6 +118,20 @@ BOUNTY_FUND_WEI=10000000000000000 TOKEN_COOLDOWN=30 BOUNTY_THRESHOLD=5 \
   forge script script/DeployBounty.s.sol --rpc-url $SEPOLIA_RPC_URL --account deployer --broadcast
 ```
 
+## Adding more judges
+
+Judges hold `JUDGE_ROLE` on the Bounty (award) and the RewardToken (slash). The admin adds or removes one with:
+
+```bash
+cd contracts
+JUDGE_ADDRESS=0x... JUDGE_ACTION=grant   forge script script/ManageJudge.s.sol --rpc-url $SEPOLIA_RPC_URL --account deployer --broadcast
+# JUDGE_ACTION=revoke to remove one
+```
+
+A judge then calls `award(human, sampleId)` / `slash(human, reason)` from their own wallet, e.g. in Etherscan's
+*Write Contract* tab (linked from the page once the sources are verified). Test:
+`test_Bounty_SeveralJudgesCanBeAddedAndRemoved`.
+
 ## Honest limits
 
 - The demo runs `WORLD_ID_MODE=simulated` for recording; the real World ID flow is built and passed with a real
