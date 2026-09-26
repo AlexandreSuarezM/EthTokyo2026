@@ -159,6 +159,12 @@ Demo rules (the user's table):
 - **Sepolia:** `config/11155111.bounty.json`: RewardToken `0xD5CDd7f50fb022ea0403ECbeC8F2C7F1a4cFBeae`, Bounty
   `0x882C6095C009EE63EB725B28C590034ae19F75A3`, pool **0.01 ETH** (0.1 ETH in the design; the deployer had 0.016),
   claims open at deploy + 1 s (convenience), cooldown 30 s, threshold 5, judge = relayer.
+- **Samples are C now** (`app/demo-data/hello-world/*.c`): `correct.c` prints `"Hello world!
+"`; four wrong ones
+  each have one silly mistake (missing `;`, `return exit;`, `print` for `printf`, `return "0";`) and print without
+  `
+`, so they're easy to tell apart. The Bounty's on-chain `codeHash` (`0x34d1…ece3`) was taken from the earlier
+  JavaScript sample; `codeURI` points to the folder, which now holds the C samples. Not redeployed (deployer funds).
 - The two earlier `ChallengeRewards` deployments (`0xAb95…3753`, `0x9d91…C270`, 0.02 test ETH each) are abandoned.
 
 ## Demo ladder and judge (DEMO_PLAN step 1, 2026-09-26 13:30)

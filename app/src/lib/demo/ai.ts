@@ -8,16 +8,16 @@ import type { RepoSource } from "@/lib/repo/source";
 import { WorldError } from "@/lib/world/errors";
 
 /**
- * The demo "AI": no LLM. It serves hello-world variants from app/demo-data/hello-world/. A secure
+ * The demo "AI": no LLM. It serves C hello-world variants from app/demo-data/hello-world/. A secure
  * 50/50 coin picks the correct file or one random wrong file. The verdict and a random salt stay on
  * the server; the page only ever gets the code. `commitmentOf(code, verdict, salt)` is sealed as the
  * approval's contextHash, so the judge can later prove the verdict was fixed before the user decided.
  */
 
 export const DEMO_REPO = "demo/app";
-export const DEMO_TASK = "Write a hello world function";
+export const DEMO_TASK = "Write a C hello world program";
 export const DEMO_MODEL = "fake-ai:hello-world-files";
-export const CORRECT_VARIANT = "correct.js";
+export const CORRECT_VARIANT = "correct.c";
 const BASE_SHA = "0".repeat(64);
 
 export type Variant = { name: string; code: string };
@@ -25,11 +25,11 @@ export type Variant = { name: string; code: string };
 export const DEMO_DATA_DIR = path.resolve(process.cwd(), "demo-data", "hello-world");
 
 export function loadVariants(dir: string = DEMO_DATA_DIR): { correct: Variant; wrong: Variant[] } {
-  const files = readdirSync(dir).filter((f) => f.endsWith(".js")).sort();
+  const files = readdirSync(dir).filter((f) => f.endsWith(".c")).sort();
   const all = files.map((name) => ({ name, code: readFileSync(path.join(dir, name), "utf8").replace(/\r\n/g, "\n") }));
   const correct = all.find((v) => v.name === CORRECT_VARIANT);
   const wrong = all.filter((v) => v.name !== CORRECT_VARIANT);
-  if (!correct || wrong.length === 0) throw new Error("demo-data/hello-world needs correct.js and at least one wrong variant");
+  if (!correct || wrong.length === 0) throw new Error("demo-data/hello-world needs correct.c and at least one wrong variant");
   return { correct, wrong };
 }
 

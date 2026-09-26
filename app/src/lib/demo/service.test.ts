@@ -137,16 +137,19 @@ async function approveAnswer(w: World, proposalId: string) {
 }
 
 describe("fake AI files", () => {
-  it("has one correct answer and five subtly wrong ones", () => {
+  it("has one correct C program and four with one silly mistake each", () => {
     const v = loadVariants();
-    expect(v.correct.code).toContain('return "Hello, World!"');
-    expect(v.wrong.map((x) => x.name).sort()).toEqual(["no-return.js", "prints-nothing.js", "syntax-error.js", "typo.js", "wrong-name.js"]);
-    for (const x of v.wrong) expect(x.code).not.toBe(v.correct.code);
+    expect(v.correct.code).toContain('printf("Hello world!\\n");');
+    expect(v.wrong.map((x) => x.name).sort()).toEqual(["missing-semicolon.c", "print-not-printf.c", "return-exit.c", "return-string.c"]);
+    for (const x of v.wrong) {
+      expect(x.code).not.toBe(v.correct.code);
+      expect(x.code).not.toContain("\\n"); // wrong samples never print a newline: easy to tell apart
+    }
   });
 
   it("refuses a data dir without a correct answer", () => {
     const dir = mkdtempSync(path.join(tmpdir(), "hitl-ai-"));
-    writeFileSync(path.join(dir, "typo.js"), "x");
+    writeFileSync(path.join(dir, "typo.c"), "x");
     expect(() => loadVariants(dir)).toThrow();
   });
 });
@@ -164,7 +167,7 @@ describe("demo flow", () => {
       const a = await ask(w.deps, { account: w.user.address });
       expect(a.round).toBe(1);
       const json = JSON.stringify(a);
-      for (const secret of ["wrong", "right", "typo.js", "correct.js", "verdict", "salt", "variant"]) expect(json).not.toContain(secret);
+      for (const secret of ["wrong", "right", "correct.c", "missing-semicolon", "verdict", "salt", "variant"]) expect(json).not.toContain(secret);
     });
 
     it("report (signed by the reviewer) = +1 token and a new answer in the next round; never a slash", async () => {
