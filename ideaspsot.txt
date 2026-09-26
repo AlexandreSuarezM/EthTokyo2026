@@ -1,0 +1,16 @@
+1 judge is to overpowered
+the concept of trust building up is okay but insuficient for the standards 
+
+Check more in deatail audits and ways of messing with the tokens 
+option 1 set a max to avoid overflow of tokens if that is a thing 
+
+Give distinc tokens to distinc code auditor providers 
+So one client doesnt slash all the contractors of every client 
+
+Add ens for roles and permissions 
+
+Add a log for the submissions so ia is the one sending the code and the code audit from the user can submit a change.(?)
+
+Add diferent accountability scores team oriented. 
+
+
