@@ -115,7 +115,6 @@ export default function DemoApp({ config, appId }: { config: Config; appId: `app
   const [lastJudge, setLastJudge] = useState<JudgeResult | null>(null);
   const [countdown, setCountdown] = useState(0);
   const [tokenCountdown, setTokenCountdown] = useState(0);
-  const [lastReview, setLastReview] = useState<{ kind: "Report" | "Approve"; note: string; txs: { label: string; hash: Hex }[] } | null>(null);
   const [enrollRp, setEnrollRp] = useState<{ rp_context: RpContext; action?: string } | null>(null);
   const [sessionRp, setSessionRp] = useState<{ rp_context: RpContext } | null>(null);
   const [pendingEnroll, setPendingEnroll] = useState<{ enrollmentId: string; sessionSignal: string } | null>(null);
@@ -271,7 +270,6 @@ export default function DemoApp({ config, appId }: { config: Config; appId: `app
       const r = await api<Answer & { token: TokenNote }>("/api/demo/reject", { proposalId: answer!.id, signature });
       setAnswer(r);
       setLastJudge(null);
-      setLastReview({ kind: "Report", note: r.token?.note ?? "Reported", txs: r.token?.txHash ? [{ label: "token tx", hash: r.token.txHash }] : [] });
       await refresh();
       if (r.token) setNotice(`Reported. ${r.token.note}`);
     });
@@ -279,7 +277,6 @@ export default function DemoApp({ config, appId }: { config: Config; appId: `app
   async function completeApproval(prepared: Prepared, signature: Hex, result?: unknown) {
     setBusy("Recording the receipt on Sepolia…");
     const r = await api<{ receiptId: string; txHash: Hex }>("/api/approve/complete", { approvalId: prepared.approvalId, signature, ...(result ? { result } : {}) });
-    setLastReview({ kind: "Approve", note: `Receipt #${r.receiptId} recorded`, txs: [{ label: "receipt tx", hash: r.txHash }] });
     setAnswer(null);
     await refresh();
     setNotice(`Receipt #${r.receiptId} recorded. No token minted. The judge is checking…`);
@@ -309,18 +306,6 @@ export default function DemoApp({ config, appId }: { config: Config; appId: `app
     try {
       const j = await api<JudgeResult>("/api/demo/judge", { receiptId });
       setLastJudge(j);
-      setLastReview((v) =>
-        v && v.kind === "Approve"
-          ? {
-              ...v,
-              txs: [
-                ...v.txs,
-                ...(j.token?.txHash ? [{ label: "token tx", hash: j.token.txHash }] : []),
-                ...(j.slash?.txHash ? [{ label: "slash tx", hash: j.slash.txHash }] : []),
-              ],
-            }
-          : v,
-      );
       await refresh();
     } finally {
       setBusy(null);
@@ -412,19 +397,6 @@ export default function DemoApp({ config, appId }: { config: Config; appId: `app
               </div>
             </div>
           )}
-          {lastReview && (
-            <div style={{ marginTop: 12, fontSize: 13, color: "var(--muted)" }}>
-              Last submission: <b style={{ color: "#e6f1ff" }}>{lastReview.kind}</b> · {lastReview.note} · verify on Etherscan:{" "}
-              {lastReview.txs.length === 0
-                ? "no transaction (cooldown)"
-                : lastReview.txs.map((t, i) => (
-                    <span key={t.hash}>
-                      {i > 0 && " · "}
-                      {link("tx", t.hash, t.label)}
-                    </span>
-                  ))}
-            </div>
-          )}
           {lastJudge && (
             <div style={{ marginTop: 14, padding: 12, borderRadius: 8, border: `2px solid ${lastJudge.verdict === "right" ? C.green : C.red}` }}>
               <div style={{ fontWeight: 700 }}>Judge on receipt #{lastJudge.receiptId}: the code was {lastJudge.verdict.toUpperCase()}</div>
@@ -485,25 +457,6 @@ export default function DemoApp({ config, appId }: { config: Config; appId: `app
                     </Btn>
                   )}
                   {s.rewards.claimed && <div style={{ color: C.green, marginTop: 6 }}>Prize share claimed ✓</div>}
-                  <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 10, paddingTop: 8, borderTop: "1px dashed rgba(34, 227, 255, 0.2)" }}>
-                    <b style={{ color: "#cfe9ff" }}>Judges</b> hold JUDGE_ROLE on both contracts (the admin adds more with{" "}
-                    <code>script/ManageJudge.s.sol</code>). On Etherscan:{" "}
-                    {config.explorer && (
-                      <>
-                        <a href={`${config.explorer}/address/${s.rewards.bounty}#writeContract`} target="_blank" rel="noreferrer">
-                          award (Bounty) ↗
-                        </a>{" "}
-                        ·{" "}
-                        <a href={`${config.explorer}/address/${s.rewards.token}#writeContract`} target="_blank" rel="noreferrer">
-                          slash (RewardToken) ↗
-                        </a>{" "}
-                        ·{" "}
-                        <a href={`${config.explorer}/address/${s.rewards.bounty}#readContract`} target="_blank" rel="noreferrer">
-                          read state ↗
-                        </a>
-                      </>
-                    )}
-                  </div>
                   <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 8 }}>
                     Tokens are soulbound. Every review earns one (at most one per {s.rewards.cooldown} s); approving code that fails loses them
                     all. Once qualified, your prize share is kept.
