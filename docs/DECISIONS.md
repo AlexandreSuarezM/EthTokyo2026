@@ -130,6 +130,32 @@ validator is identified by their EIP-712 signature. This replaces "relayer submi
 - `WORLD_ENVIRONMENT` (default `production`) is the only environment the server accepts; `staging` is for the
   simulator only.
 
+## Single-user demo: validator, oracle, simulated mode (2026-09-26)
+
+- **Naming.** *Validator* = the human pressing Approve / Reject. *Oracle* = the server that generated the code
+  and knows whether it was wrong.
+- **Oracle on-chain.** A role grant was not enough: `audit` requires the caller to be an enrolled human
+  (`NotEnrolled`), and the server is not one. Smallest change: `ValidationReceipts.ORACLE_ROLE` +
+  `oraclePenalize(id, evidenceHash, major)`. It reuses `_openCase` (real receipt in standing, evidence, liability
+  window) and the same ruling path as `audit` (appeal window, one penalty per receipt in the ledger, soulbound,
+  cap, fade unchanged). The oracle can't rule on a receipt of its own human. Tests: `contracts/test/Oracle.t.sol`.
+- **Demo trust assumption: oracle = relayer.** `environments/demo.json` has `"receipts": {"oracle": "operator"}`;
+  the deploy script grants `ORACLE_ROLE` to the operator (the relayer, from the `OPERATOR` env var). No address
+  is written in the preset. Other presets grant no oracle. See `docs/LIMITS.md` and AUDIT C-10.
+- **`demo.json` numbers.** Base 100, escalation 100%: mistake 1 = 100 (stage 1), mistake 2 = 100 + 100 = 300
+  (stage 2 at 200: no AI), mistake 3 bans (stage 3 at 500). Fade 100 points per day (fadeDays 1, the minimum the
+  deploy script takes). Liability window 365 days. Appeal window 0 (no appeals UI): the penalty is minted at once.
+  One repo, `demo/app`, tier 1 (a simulated human is capped at `maxTierForSelfie = 1`).
+- **`WORLD_ID_MODE=real|simulated`** (server-only, default `real`). Our only real World ID has no 4.0 credential
+  (`credential_unavailable`), so the demo needs a mode without World proofs:
+  - enrollment: `POST /api/enroll/simulated {account}` (404 unless simulated) returns an attestation at credential
+    level **3 = SIMULATED** (never Orb; `HumanRegistry.LEVEL_SIMULATED`, capped like Selfie). The wallet still sends
+    `enrollAttested` itself. `humanId = keccak256(abi.encode("hitl.human.simulated.v1", account))`: a separate
+    namespace, so it can never collide with a real human's id;
+  - approval: `complete` takes no World result; the wallet signature must come from an enrolled **simulated**
+    human (a real Orb/Selfie human can never be approved for without a proof). Single use is unchanged;
+  - every API response carries `simulated: true`, and the server logs a warning at startup.
+
 ## One protocol version per action: World ID 4.0 only (smoke test, 2026-09-26)
 
 - **Found:** in the first real test, World App answered our `proofOfHuman()` request with a **legacy 3.0** proof

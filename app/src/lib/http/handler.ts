@@ -1,4 +1,5 @@
 import "server-only";
+import { simulatedMark } from "@/lib/env";
 import { WorldError, errorResponse } from "@/lib/world/errors";
 
 const noStore = { "cache-control": "no-store" };
@@ -17,7 +18,7 @@ export async function handleJson<D, T>(
     return errorResponse(new WorldError("invalid_request", "The request body must be JSON."));
   }
   try {
-    return Response.json(await run(await deps(), body), { headers: noStore });
+    return Response.json({ ...(await run(await deps(), body)), ...simulatedMark() }, { headers: noStore });
   } catch (e) {
     if (e instanceof WorldError) return errorResponse(e);
     console.error(`${label}: unexpected error`, e instanceof Error ? e.name : "unknown");

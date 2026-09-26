@@ -1,5 +1,5 @@
 import "server-only";
-import { isAddress, getAddress, toHex, zeroAddress, zeroHash, type Address, type Hex } from "viem";
+import { encodeAbiParameters, isAddress, getAddress, keccak256, toHex, zeroAddress, zeroHash, type Address, type Hex } from "viem";
 import { z } from "zod";
 import { sessionRefOf, type Attester } from "@/lib/chain/attester";
 import type { CredentialLevel, Store } from "@/lib/db/store";
@@ -66,6 +66,18 @@ export type CompleteResult = { status: "attested"; attestation: EnrollAttestatio
 const address = z.string().refine((v) => isAddress(v, { strict: false })).transform((v) => getAddress(v));
 const startBody = z.strictObject({ account: address, result: z.unknown() });
 const completeBody = z.strictObject({ enrollmentId: z.string().regex(/^[0-9a-f]{64}$/), result: z.unknown() });
+const simulatedBody = z.strictObject({ account: address });
+
+/** HumanRegistry.LEVEL_SIMULATED: demo only, no World proof, never Orb (capped like Selfie on-chain). */
+export const SIMULATED_LEVEL = 3 as const;
+
+/** Simulated humans have their own namespace: they can never collide with a real (nullifier-derived) humanId. */
+export const simulatedHumanId = (account: Address): Hex =>
+  keccak256(encodeAbiParameters([{ type: "string" }, { type: "address" }], ["hitl.human.simulated.v1", getAddress(account)]));
+
+/** A stable, well-formed session_id for a simulated human (never a real World session). */
+const simulatedSessionId = (account: Address, humanId: Hex) =>
+  `session_${keccak256(encodeAbiParameters([{ type: "string" }, { type: "address" }], ["hitl.session.simulated.v1", getAddress(account)])).slice(2)}${humanId.slice(2)}`;
 
 function parseBody<T extends z.ZodType>(schema: T, input: unknown): z.infer<T> {
   const parsed = schema.safeParse(input);
@@ -210,4 +222,29 @@ export async function completeEnrollment(deps: EnrollDeps, body: unknown): Promi
       credentialLevel: taken.credentialLevel,
     }),
   };
+}
+
+/**
+ * WORLD_ID_MODE=simulated only (the route 404s otherwise): enrolls the wallet WITHOUT a World ID proof,
+ * at the SIMULATED credential level. The wallet still sends enrollAttested itself.
+ */
+export async function simulatedEnrollment(deps: EnrollDeps, body: unknown): Promise<CompleteResult> {
+  const { account } = parseBody(simulatedBody, body);
+  const humanId = simulatedHumanId(account);
+  await assertNotEnrolledOnChain(deps, humanId, account);
+
+  const existing = await deps.store.sessionOfHuman(humanId);
+  const sessionId = existing?.sessionId ?? simulatedSessionId(account, humanId);
+  if (!existing) {
+    const saved = await deps.store.saveSession({
+      humanId,
+      sessionId,
+      account,
+      credentialLevel: SIMULATED_LEVEL,
+      enrollNullifier: BigInt(humanId).toString(),
+      sybilScore: null,
+    });
+    if (!saved) throw new WorldError("already_enrolled", "This wallet is already enrolled.");
+  }
+  return { status: "attested", attestation: await attest(deps, { account, humanId, sessionId, credentialLevel: SIMULATED_LEVEL }) };
 }

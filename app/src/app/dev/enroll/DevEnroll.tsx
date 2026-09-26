@@ -128,7 +128,7 @@ export default function DevEnroll({ appId, environment, account }: Props) {
         <section style={{ marginTop: 24, padding: 16, border: "2px solid #1a7f37", borderRadius: 8 }}>
           <h2 style={{ fontSize: 18, margin: 0 }}>✓ Success: verified by World, attester signed</h2>
           <p style={{ margin: "8px 0 0" }}>
-            Credential level: <b>{done.credentialLevel === 1 ? "1 (Proof of Human / Orb)" : "2 (Selfie Check)"}</b>
+            Credential level: <b>{({ 1: "1 (Proof of Human / Orb)", 2: "2 (Selfie Check)", 3: "3 (SIMULATED, no World proof)" } as const)[done.credentialLevel]}</b>
             <br />
             session_id: <code>{done.sessionIdPrefix}</code>
             {elapsed !== null && (

@@ -9,6 +9,7 @@ import {IHumanVerifier, HumanProof} from "./interfaces/IHumanVerifier.sol";
 
 uint8 constant CREDENTIAL_ORB = 1; //    Proof of Human (Orb)
 uint8 constant CREDENTIAL_SELFIE = 2; // Selfie check
+uint8 constant CREDENTIAL_SIMULATED = 3; // demo only: no World proof; never Orb, capped like Selfie
 
 /// @title HumanRegistry
 /// @notice ZONE 1 / "Set user auth". Binds exactly one unique human to one active account key.
@@ -25,6 +26,7 @@ uint8 constant CREDENTIAL_SELFIE = 2; // Selfie check
 contract HumanRegistry is AccessControl, EIP712 {
     uint8 public constant LEVEL_ORB = CREDENTIAL_ORB;
     uint8 public constant LEVEL_SELFIE = CREDENTIAL_SELFIE;
+    uint8 public constant LEVEL_SIMULATED = CREDENTIAL_SIMULATED;
 
     bytes32 public constant ENROLL_TYPEHASH = keccak256(
         "AttestedEnroll(address account,bytes32 humanId,bytes32 sessionRef,uint8 credentialLevel,uint256 deadline)"
@@ -110,7 +112,9 @@ contract HumanRegistry is AccessControl, EIP712 {
         uint256 deadline,
         bytes calldata attesterSig
     ) external {
-        if (credentialLevel != LEVEL_ORB && credentialLevel != LEVEL_SELFIE) revert BadLevel();
+        if (credentialLevel != LEVEL_ORB && credentialLevel != LEVEL_SELFIE && credentialLevel != LEVEL_SIMULATED) {
+            revert BadLevel();
+        }
         if (humanId == bytes32(0)) revert UnknownHuman();
         if (humanOf[msg.sender] != bytes32(0)) revert AlreadyEnrolled();
         if (accountOf[humanId] != address(0)) revert HumanAlreadyHasAccount(); // one human, one account

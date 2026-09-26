@@ -38,6 +38,9 @@ contract ValidationReceipts is AccessControl, EIP712 {
 
     bytes32 public constant FORENSICS_ROLE = keccak256("FORENSICS_ROLE");
     bytes32 public constant APPEALS_ROLE = keccak256("APPEALS_ROLE");
+    /// @notice Server that generated the code and knows when a validation was wrong (demo trust
+    ///         assumption: an address, not an enrolled human). See oraclePenalize.
+    bytes32 public constant ORACLE_ROLE = keccak256("ORACLE_ROLE");
 
     bytes32 public constant APPROVAL_TYPEHASH = keccak256(
         "HumanApproval(bytes32 sessionId,bytes32 repoId,bytes32 commitHash,bytes32 contextHash,bytes32 modelId,address submitter,uint32 linesChanged,uint16 rounds,uint256 nonce,uint256 deadline)"
@@ -128,6 +131,7 @@ contract ValidationReceipts is AccessControl, EIP712 {
     event StatusChanged(uint256 indexed id, Status status);
     event Flagged(uint256 indexed id, bytes32 indexed flaggerHuman, bytes32 evidenceHash);
     event Ruled(uint256 indexed id, address indexed judge, bool wrong, bool major);
+    event OracleRuled(uint256 indexed id, address indexed oracle, bytes32 evidenceHash);
     event Appealed(uint256 indexed id, bytes32 appealHash);
     event AppealResolved(uint256 indexed id, address indexed reviewer, bool overturned);
     event PenaltyIssued(uint256 indexed id, uint256 indexed penaltyTokenId);
@@ -340,6 +344,19 @@ contract ValidationReceipts is AccessControl, EIP712 {
         _rule(id, !correct, major);
     }
 
+    /// @notice The oracle rules a real receipt wrong, with evidence, inside the liability window.
+    ///         Same checks and due process as `audit` (one case per receipt, appeal window, one
+    ///         penalty per receipt), except the ruler is a trusted address, not an enrolled human.
+    ///         It can never rule on a receipt of its own human.
+    function oraclePenalize(uint256 id, bytes32 evidenceHash, bool major) external onlyRole(ORACLE_ROLE) {
+        bytes32 oracleHuman = humans.humanOf(msg.sender);
+        if (oracleHuman != bytes32(0) && oracleHuman == _receipts[id].validatorHuman) revert OwnReceipt();
+        _openCase(id, bytes32(0), evidenceHash);
+        emit StatusChanged(id, Status.Flagged);
+        emit OracleRuled(id, msg.sender, evidenceHash);
+        _decide(id, true, major, oracleHuman);
+    }
+
     function appeal(uint256 id, bytes32 appealHash) external {
         Receipt storage rc = _receipts[id];
         Ruling storage r = rulings[id];
@@ -393,10 +410,14 @@ contract ValidationReceipts is AccessControl, EIP712 {
     }
 
     function _rule(uint256 id, bool wrong, bool major) internal {
-        Receipt storage rc = _receipts[id];
         bytes32 judgeHuman = humans.humanOf(msg.sender);
         if (judgeHuman == bytes32(0)) revert NotEnrolled();
-        if (judgeHuman == rc.validatorHuman) revert OwnReceipt();
+        if (judgeHuman == _receipts[id].validatorHuman) revert OwnReceipt();
+        _decide(id, wrong, major, judgeHuman);
+    }
+
+    function _decide(uint256 id, bool wrong, bool major, bytes32 judgeHuman) internal {
+        Receipt storage rc = _receipts[id];
         Ruling storage r = rulings[id];
         r.judgeHuman = judgeHuman;
         r.ruledAt = uint64(block.timestamp);

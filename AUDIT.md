@@ -11,18 +11,24 @@
 **Revision 2 (task CC-1):** attested enrollment and key rotation in `HumanRegistry` (World ID 4.0
 verified off-chain by the backend, co-signed with EIP-712), credential levels (Orb, Selfie), and the
 Selfie cap on `REPO_TIER` in `PermissionRegistry`. New finding: L-05. New trust assumptions: C-08, C-09.
+
+**Revision 3 (single-user demo):** `ValidationReceipts.ORACLE_ROLE` + `oraclePenalize` (a trusted address,
+not an enrolled human, rules a real receipt wrong through the same case/ruling/due-process path as `audit`),
+and a third credential level `SIMULATED = 3` in `HumanRegistry` (demo only, no World proof), capped like
+Selfie in `PermissionRegistry`. New trust assumptions: C-10, C-11. Regression tests: `test/Oracle.t.sol`,
+`test_DemoPresetMakesTheOperatorTheOracle`, `test_AttestedEnrollInputGuards` (levels 4-5 still revert).
 Paths are relative to `contracts/`.
 
 | File | SHA-256 (first 16) | Notes |
 |---|---|---|
-| `src/HumanRegistry.sol` | `0ffa79bb4298eee6` | one human, one account; key rotation; on-chain or attested mode; credential level |
-| `src/PermissionRegistry.sol` | `0001faeefff38e46` | expiring grants, presets, stage gating, Selfie tier cap |
-| `src/ValidationReceipts.sol` | `0d20a241c29dca77` | receipts, forensics, appeals |
+| `src/HumanRegistry.sol` | `46bda0303a5e3aa0` | one human, one account; key rotation; on-chain or attested mode; credential level |
+| `src/PermissionRegistry.sol` | `96dee6bef9dfb08a` | expiring grants, presets, stage gating, Selfie tier cap |
+| `src/ValidationReceipts.sol` | `5d0c5f30f0e1802b` | receipts, forensics, oracle, appeals |
 | `src/PenaltyLedger.sol` | `7370194ace4695f5` | verdict token, decaying score, stages |
 | `src/WorldIDVerifier.sol` | `47cfbc9361772965` | World ID router adapter |
 | `src/interfaces/*.sol` | `dfdc…`, `c4eb…`, `6674…` | interfaces |
 
-1,312 lines in scope. Compiler: solc 0.8.28, `via_ir`, optimizer 200 runs, OpenZeppelin 5.1.0.
+1,339 lines in scope. Compiler: solc 0.8.28, `via_ir`, optimizer 200 runs, OpenZeppelin 5.1.0.
 
 **Out of scope:**
 - `src/mocks/` (test-only);
@@ -127,6 +133,8 @@ These are design choices, not bugs. For a production deployment, put `DEFAULT_AD
 | C-06 | The attester (backend) is trusted in attester mode | The attester can't mint alone, since the validator's signature is also required, but it could co-sign without really verifying World ID. On-chain mode instead relies on World ID 3.x nullifier semantics. |
 | C-07 | `rotateKey` needs only a World ID proof | Compromising a person's World ID means taking over their account (and their score follows) |
 | C-08 | Admin can switch the enrollment mode (`setAttester`) | Humans enrolled in one mode keep their `humanId`; if the same person enrolls again after a switch, the other derivation gives them a second account (L-05). Pick one mode per deployment and don't switch once people have enrolled. |
+| C-10 | The **oracle** (`ORACLE_ROLE`) is trusted to say a validation was wrong | **Exception to "whoever rules is an enrolled human"** (M-01): the oracle is an address, e.g. the server that generated the code. It can penalize any real, unpenalized receipt inside the liability window, with an evidence hash, once per receipt, never a receipt of its own human, and only through the normal ruling path (the appeal window, if non-zero, still applies). A leaked oracle key can penalize every validator within the window. No preset grants it except `environments/demo.json`, where the oracle is the relayer (demo trust assumption). Keep the role unset in production or give it to a separate, monitored key. |
+| C-11 | The attester can enroll `SIMULATED` humans (level 3) | Demo only: a simulated human has no World proof behind it. It is never Orb and is capped like Selfie (`maxTierForSelfie`), and the backend only issues it with `WORLD_ID_MODE=simulated`. An attester key can already enroll anyone (C-09); level 3 only makes that visible on-chain. |
 | C-09 | The attester (backend) is trusted for identity in attested mode | Unlike C-06, the attester acts **alone** here: a leaked or dishonest attester key can enroll unlimited fake humans at any credential level, and can move any human's account to a key it controls with `rotateKeyAttested`, since no signature from the old key is needed. Mitigations in place: signatures name the account (no front-running), expire, can't be replayed (used-digest set), and every change emits `EnrolledAttested` / `KeyRotatedAttested`. Keep the key server-only (ideally in a KMS/HSM), monitor those events, and consider a delay on attested rotation during which the old key can cancel. |
 
 ## 6. Slither results after fixes (17, all triaged)
@@ -169,6 +177,9 @@ Results in `src/mirrors/` (out of scope), `timestamp` and `naming-convention` ar
 | Attested enrollment: only the attester's signature, only for the named account, before the deadline, once | `test_AttestedEnrollHappyPath`, `test_AttestedEnrollWrongAttesterReverts`, `test_AttestedEnrollIsBoundToSender`, `test_AttestedEnrollTamperedLevelReverts`, `test_AttestedEnrollExpiredReverts`, `test_AttestedEnrollReplayReverts` |
 | One human, one account in attested mode too; one mode at a time | `test_SecondAccountForSameHumanReverts`, `test_EnrolledAccountCannotEnrollAgain`, `test_L05_EnrollModesAreExclusive` |
 | Attested rotation can't be replayed to move a human back to an old key | `test_AttestedRotationReplayReverts`, `test_AttestedRotationGuards` |
+| Oracle penalizes only a real, unpenalized receipt, with evidence, inside the window, once; keeps due process; never its own human | `test_OracleNeedsRealReceiptEvidenceAndWindow`, `test_OraclePenaltyOncePerReceipt`, `test_OracleCannotPenalizeOverturnedReceipt`, `test_OracleKeepsDueProcessWhenAppealWindowIsOpen`, `test_OracleCannotRuleOnItsOwnHumansReceipt`, `test_OnlyOracleRoleCanOraclePenalize` |
+| Oracle penalties are soulbound and escalate, cap and fade like any other | `test_OracleNeedsNoEnrollmentAndPenalizesTheValidator`, `test_OraclePenaltyTokenIsSoulbound`, `test_OraclePenaltiesEscalateCapAndFade` |
+| Simulated humans are a distinct level (never Orb) and capped like Selfie | `test_SimulatedLevelIsDistinctFromOrb`, `test_SimulatedHumanIsCappedLikeSelfie`, `test_AttestedEnrollInputGuards` |
 | Selfie humans never exceed `maxTierForSelfie`, at grant or at read, and lowering the cap applies at once | `test_SelfieCapEnforcedInValidate`, `test_GrantAboveSelfieCapReverts`, `test_SelfieCapLoweredTakesEffectAtOnce`, `testFuzz_SelfieTierNeverAboveCap`, `test_OrbHumanIsNotCapped` |
 
 ## 8. Economics of the default rulebook
